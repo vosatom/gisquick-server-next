@@ -1,0 +1,11 @@
+{{define "email"}}
+
+{{block "greeting" .}}Hi {{ .User.Username }},{{end}}
+
+{{block "content" .}}{{end}}
+
+{{block "footer" .}}
+
+Best Regards, Gisquick Team
+{{end}}
+{{end}}

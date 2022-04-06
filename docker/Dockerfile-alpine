@@ -1,0 +1,41 @@
+FROM alpine:3.13 as dbhash-build
+RUN apk add build-base tcl
+# https://www.sqlite.org/src/tarball/sqlite.tar.gz?r=release 
+RUN mkdir -p /src && wget -O - https://www.sqlite.org/src/tarball/sqlite.tar.gz?r=version-3.38.2 | tar zxf - -C /src
+WORKDIR /src/sqlite
+RUN ./configure && make dbhash
+
+
+FROM golang:1.16-alpine as build
+RUN apk add --no-cache git
+WORKDIR /go/src/app
+
+# https://github.com/golang/go/issues/44435
+# COPY ./go.mod ./go.sum ./
+# RUN go get -d -v ./...
+#RUN go list -test -deps ./...
+
+COPY go.mod go.sum ./
+RUN go mod download
+# RUN go mod graph | awk '{if ($1 !~ "@") print $2}' | xargs go get
+
+COPY . .
+
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /go/bin/gisquick cmd/main.go
+
+
+FROM alpine:latest
+# USER nonroot:nonroot
+# COPY --from=build --chown=nonroot:nonroot /go/bin/app /app
+RUN addgroup -g 1000 -S app && adduser -u 1000 -S app -D -G app
+
+COPY --from=dbhash-build /src/sqlite/dbhash /usr/local/bin/
+
+WORKDIR /app
+COPY --from=build /go/src/app/templates ./templates
+COPY --from=build /go/bin/gisquick /usr/local/bin/
+
+USER app
+EXPOSE 3000
+# ENTRYPOINT ["gisquick"]
+CMD ["gisquick", "serve"]
