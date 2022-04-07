@@ -24,13 +24,13 @@ var (
 )
 
 type Account struct {
-	Username   string `json:"username"`
-	Email      string `json:"email"`
-	Password   []byte
+	Username   string     `json:"username"`
+	Email      string     `json:"email"`
+	Password   string     `json:"password"`
 	FirstName  string     `json:"first_name"`
 	LastName   string     `json:"last_name"`
-	Active     bool       `json:"active"`
-	Superuser  bool       `json:"superuser"`
+	Active     bool       `json:"is_active"`
+	Superuser  bool       `json:"is_superuser"`
 	DateJoined *time.Time `json:"date_joined"`
 	LastLogin  *time.Time `json:"last_login"`
 }
@@ -127,6 +127,14 @@ func addSuperuser(dbConn *sqlx.DB, args conf.Args) error {
 	return accountsRepo.Create(account)
 }
 
+func utcTime(t *time.Time) *time.Time {
+	if t == nil {
+		return t
+	}
+	d := t.UTC()
+	return &d
+}
+
 func dumpUsers(dbConn *sqlx.DB, args conf.Args) error {
 	var dbUsers []postgres.User
 	if err := dbConn.Select(&dbUsers, `SELECT * FROM app_user`); err != nil {
@@ -135,13 +143,15 @@ func dumpUsers(dbConn *sqlx.DB, args conf.Args) error {
 	accounts := make([]Account, len(dbUsers))
 	for i, u := range dbUsers {
 		accounts[i] = Account{
-			Username:  u.Username,
-			Email:     u.Email,
-			Password:  u.Password,
-			FirstName: u.FirstName,
-			LastName:  u.LastName,
-			Active:    u.IsActive,
-			Superuser: u.IsSuperuser,
+			Username:   u.Username,
+			Email:      u.Email,
+			Password:   string(u.Password),
+			FirstName:  u.FirstName,
+			LastName:   u.LastName,
+			Active:     u.IsActive,
+			Superuser:  u.IsSuperuser,
+			DateJoined: utcTime(u.DateJoined),
+			LastLogin:  utcTime(u.LastLogin),
 		}
 	}
 	encoder := json.NewEncoder(os.Stdout)
@@ -167,7 +177,7 @@ func loadUsers(dbConn *sqlx.DB, args conf.Args) error {
 		a := domain.Account{
 			Username:    u.Username,
 			Email:       u.Email,
-			Password:    u.Password,
+			Password:    []byte(u.Password),
 			FirstName:   u.FirstName,
 			LastName:    u.LastName,
 			IsSuperuser: u.Superuser,
