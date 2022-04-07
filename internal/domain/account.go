@@ -1,14 +1,20 @@
 package domain
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"hash"
 	"net/mail"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 var (
@@ -26,6 +32,25 @@ func validateUsername(v string) bool {
 func validateEmail(email string) bool {
 	_, err := mail.ParseAddress(email)
 	return err == nil
+}
+
+// https://github.com/meehow/go-django-hashers/blob/master/check.go
+func checkPbkdf2(password, encoded string, keyLen int, h func() hash.Hash) (bool, error) {
+	parts := strings.SplitN(encoded, "$", 4)
+	if len(parts) != 4 {
+		return false, errors.New("Hash must consist of 4 segments")
+	}
+	iter, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return false, fmt.Errorf("Wrong number of iterations: %v", err)
+	}
+	salt := []byte(parts[2])
+	k, err := base64.StdEncoding.DecodeString(parts[3])
+	if err != nil {
+		return false, fmt.Errorf("Wrong hash encoding: %v", err)
+	}
+	dk := pbkdf2.Key([]byte(password), salt, iter, keyLen, h)
+	return bytes.Equal(k, dk), nil
 }
 
 // Account entity
@@ -55,7 +80,13 @@ func (a *Account) SetPassword(password string) error {
 }
 
 func (a *Account) CheckPassword(password string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(a.Password), []byte(password)) == nil
+	hashedPassword := string(a.Password)
+	if strings.HasPrefix(hashedPassword, "pbkdf2_sha256$") {
+		// compatibility with Django's default hashes
+		valid, _ := checkPbkdf2(password, hashedPassword, sha256.Size, sha256.New)
+		return valid
+	}
+	return bcrypt.CompareHashAndPassword(a.Password, []byte(password)) == nil
 }
 
 func (a *Account) FullName() string {
