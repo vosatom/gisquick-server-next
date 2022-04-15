@@ -144,6 +144,9 @@ func (s *DiskStorage) UserProjects(username string) ([]string, error) {
 	userDir := filepath.Join(s.ProjectsRoot, username)
 	entries, err := os.ReadDir(userDir)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return projectsNames, nil
+		}
 		return projectsNames, fmt.Errorf("listing projects: %v", err)
 	}
 	for _, entry := range entries {
@@ -605,16 +608,29 @@ func (s *DiskStorage) RemoveFiles(projectName string, files ...string) ([]domain
 	return listIndex, nil
 }
 
+type SettingsInfo struct {
+	Title string `json:"title"`
+	Auth  struct {
+		Type string `json:"type"`
+	} `json:"auth"`
+}
+
 func (s *DiskStorage) UpdateSettings(projectName string, data json.RawMessage) error {
 	project, err := s.GetProjectInfo(projectName)
 	if err != nil {
 		return err
+	}
+	var sInfo SettingsInfo
+	if err := json.Unmarshal(data, &sInfo); err != nil {
+		return fmt.Errorf("extracting authentication settings: %w", err)
 	}
 	if err := s.saveConfigFile(projectName, "settings.json", data); err != nil {
 		return fmt.Errorf("saving settings file: %w", err)
 	}
 	project.State = "published"
 	project.LastUpdate = time.Now().UTC()
+	project.Authentication = sInfo.Auth.Type
+	project.Title = sInfo.Title
 	if err := s.saveConfigFile(projectName, "project.json", project); err != nil {
 		return fmt.Errorf("updating project file: %w", err)
 	}

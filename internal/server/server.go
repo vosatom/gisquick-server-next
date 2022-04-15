@@ -20,6 +20,7 @@ import (
 
 type Config struct {
 	Debug             bool
+	Language          string
 	MapserverURL      string
 	MapCacheRoot      string
 	ProjectsRoot      string

@@ -29,6 +29,7 @@ func Serve(log *zap.SugaredLogger) error {
 	cfg := struct {
 		Gisquick struct {
 			Debug        bool   `conf:"default:false"`
+			Language     string `conf:"default:en-us"`
 			ProjectsRoot string `conf:"default:/publish"`
 			MapCacheRoot string
 			MapserverURL string
@@ -125,6 +126,7 @@ func Serve(log *zap.SugaredLogger) error {
 	es := mock.NewDummyEmailService()
 
 	conf := server.Config{
+		Language:     cfg.Gisquick.Language,
 		MapserverURL: cfg.Gisquick.MapserverURL,
 		MapCacheRoot: cfg.Gisquick.MapCacheRoot,
 		ProjectsRoot: cfg.Gisquick.ProjectsRoot,
@@ -144,11 +146,11 @@ func Serve(log *zap.SugaredLogger) error {
 	sessionStore := auth.NewRedisStore(rdb)
 	authServ := auth.NewAuthService(log, siteURL.Hostname(), cfg.Auth.SessionExpiration, accountsRepo, sessionStore)
 
-	projectsRepo2 := project.NewDiskStorage(log, filepath.Join(cfg.Gisquick.ProjectsRoot))
-	projectsServV2 := application.NewProjectsService(log, projectsRepo2)
+	projectsRepo := project.NewDiskStorage(log, filepath.Join(cfg.Gisquick.ProjectsRoot))
+	projectsServ := application.NewProjectsService(log, projectsRepo)
 
 	sws := ws.NewSettingsWS(log)
-	s := server.NewServer(log, conf, authServ, accountsService, projectsServV2, sws)
+	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws)
 
 	// Start server
 	go func() {

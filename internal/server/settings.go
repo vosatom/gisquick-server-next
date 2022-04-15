@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
@@ -111,7 +112,7 @@ func (s *Server) handleUpload() func(echo.Context) error {
 			return err
 		}
 		if !user.IsSuperuser {
-			MaxProjectSize := int64(100 * 1024 * 1024) // TODO
+			MaxProjectSize := int64(500 * 1024 * 1024) // TODO
 			req.Body = http.MaxBytesReader(c.Response(), req.Body, MaxProjectSize)
 		}
 		reader := multipart.NewReader(req.Body, boundary)
@@ -126,11 +127,9 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		}
 		err = json.NewDecoder(part).Decode(&info)
 		if err != nil {
-			s.log.Errorw("decoding upload metadata", zap.Error(err))
+			s.log.Errorw("decoding upload metadata", "project", projectName, zap.Error(err))
 			return err
 		}
-		s.log.Infow("project files upload", "project", projectName)
-		s.log.Infow("project files upload", "payload", info)
 
 		// Ver. 1
 		uploadProgress := make(map[string]int)
@@ -322,6 +321,7 @@ func (s *Server) handleCreateProject() func(echo.Context) error {
 
 func (s *Server) handleGetProjectFullInfo() func(echo.Context) error {
 	type FullInfo struct {
+		Auth       string          `json:"authentication"`
 		Name       string          `json:"name"`
 		Title      string          `json:"title"`
 		Created    time.Time       `json:"created"`
@@ -353,6 +353,7 @@ func (s *Server) handleGetProjectFullInfo() func(echo.Context) error {
 		// 	return fmt.Errorf("[handleGetProjectInfo] loading qgis meta: %w", err)
 		// }
 		data := FullInfo{
+			Auth:       info.Authentication,
 			Name:       projectName,
 			Title:      info.Title,
 			Created:    info.Created,
@@ -596,11 +597,11 @@ func (s *Server) handleDownloadProjectFile(c echo.Context) error {
 		writer := zip.NewWriter(c.Response())
 		defer writer.Close()
 		rootPath := filepath.Dir(fullPath)
-		err := filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
+		err := filepath.WalkDir(fullPath, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if !info.IsDir() {
+			if !entry.IsDir() {
 				// relPath2 := path[len(rootPath)+1:]
 				relPath, _ := filepath.Rel(rootPath, path)
 				s.log.Infow("download file", "rel", relPath)

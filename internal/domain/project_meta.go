@@ -53,13 +53,13 @@ type LayerMeta struct {
 }
 
 type LayerAttribute struct {
-	Alias      string                 `json:"alias"`
+	Alias      string                 `json:"alias,omitempty"`
 	Name       string                 `json:"name"`
 	Type       string                 `json:"type"`
-	Constrains Flags                  `json:"constrains"`
+	Constrains Flags                  `json:"constrains,omitempty"`
 	AllowNull  bool                   `json:"allow_null"` // todo: remove and use constrains
 	Widget     string                 `json:"widget"`
-	Config     map[string]interface{} `json:"config"`
+	Config     map[string]interface{} `json:"config,omitempty"`
 }
 
 type QgisMeta struct {

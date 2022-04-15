@@ -8,7 +8,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-type App struct{}
+type App struct {
+	Language string `json:"lang"`
+}
 
 type UserInfo struct {
 	Username  string `json:"username"`
@@ -38,7 +40,10 @@ func (s *Server) handleAppInit(c echo.Context) error {
 		return fmt.Errorf("handleAppInit get user: %w", err)
 	}
 	// userdtoUser()
-	data := AppPayload{User: &user}
+	app := App{
+		Language: s.Config.Language,
+	}
+	data := AppPayload{App: app, User: &user}
 	return c.JSON(http.StatusOK, data)
 }
 
