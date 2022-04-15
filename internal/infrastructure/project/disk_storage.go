@@ -27,10 +27,10 @@ type DiskStorage struct {
 }
 
 type Info struct {
-	Title       string            `json:"title"`
-	File        string            `json:"file"`
-	ProjectHash string            `json:"project_hash"`
-	Projection  domain.Projection `json:"projection"`
+	Title       string `json:"title"`
+	File        string `json:"file"`
+	ProjectHash string `json:"project_hash"`
+	Projection  string `json:"projection"`
 }
 
 func fileExists(path string) bool {
@@ -131,7 +131,7 @@ func (s *DiskStorage) Create(fullName string, meta json.RawMessage) (*domain.Pro
 
 	info := domain.ProjectInfo{
 		QgisFile:   i.File,
-		Projection: i.Projection.Code,
+		Projection: i.Projection,
 		Title:      i.Title,
 		State:      "empty",
 		Created:    time.Now().UTC(),
@@ -675,7 +675,7 @@ func (s *DiskStorage) UpdateMeta(projectName string, meta json.RawMessage) error
 	}
 
 	pInfo.QgisFile = i.File
-	pInfo.Projection = i.Projection.Code
+	pInfo.Projection = i.Projection
 	pInfo.Title = i.Title
 	pInfo.LastUpdate = time.Now().UTC()
 	return s.saveConfigFile(projectName, "project.json", pInfo)

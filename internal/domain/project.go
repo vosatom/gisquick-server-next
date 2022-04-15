@@ -37,7 +37,6 @@ func (p *Project) ProjectionCode() string {
 }
 
 type Projection struct {
-	Code        string `json:"code"`
 	Proj4       string `json:"proj4"`
 	IsGeografic bool   `json:"is_geographic"`
 }

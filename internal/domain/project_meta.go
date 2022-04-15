@@ -70,8 +70,8 @@ type QgisMeta struct {
 	// LayersTree        []TreeNode             `json:"layers_tree"`
 	LayersTree        []interface{}          `json:"layers_tree"`
 	Layers            map[string]LayerMeta   `json:"layers"`
-	Projection        Projection             `json:"projection"`
-	Projections       map[string]interface{} `json:"projections"`
+	Projection        string                 `json:"projection"`
+	Projections       map[string]Projection  `json:"projections"`
 	Units             map[string]interface{} `json:"units"`
 	ComposerTemplates []interface{}          `json:"composer_templates"`
 	Client            map[string]interface{} `json:"client_info"`
