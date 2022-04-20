@@ -137,9 +137,6 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		nextFile := func() (string, io.ReadCloser, error) { // or ReadCloser?
 			part, err := reader.NextPart()
 			if err != nil {
-				if err == io.EOF {
-					s.sws.AppChannel().Send(user.Username, "UploadProgress", uploadProgress)
-				}
 				return "", nil, err
 			}
 			var partReader io.ReadCloser = part
@@ -164,6 +161,12 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		if _, err := s.projects.UpdateFiles(projectName, changes, nextFile); err != nil {
 			return err
 		}
+		// finish reading from stream
+		if _, err := reader.NextPart(); err != io.EOF {
+			s.log.Warnf("expected end of stream", "project", projectName)
+		}
+		s.sws.AppChannel().Send(user.Username, "UploadProgress", uploadProgress)
+
 		// Ver. 2
 		/*
 			uploadProgress := make(map[string]int)

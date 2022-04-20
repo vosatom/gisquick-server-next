@@ -465,14 +465,13 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 	// 		return nil, fmt.Errorf("missing file change metadata: %s", path)
 	// 	}
 
-	s.log.Info("update files count", len(files))
-	for i := 0; i <= len(files); i++ {
+	if len(files) > 0 && next == nil {
+		return nil, fmt.Errorf("required function for reading uploaded files")
+	}
+	for i := 0; i < len(files); i++ {
 		path, reader, err := next()
 		if err != nil {
-			if err != io.EOF {
-				return nil, fmt.Errorf("reading file stream: %w", err)
-			}
-			break
+			return nil, fmt.Errorf("reading upload files stream: %w", err)
 		}
 		declaredInfo := files[i]
 		if declaredInfo.Path != path {
