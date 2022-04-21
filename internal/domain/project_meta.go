@@ -175,7 +175,28 @@ func CreateTree2(items []interface{}) ([]TreeNode, error) {
 
 func TransformLayersTree(tree []TreeNode, accept func(id string) bool, transform func(id string) interface{}) ([]interface{}, error) {
 	list := make([]interface{}, 0)
-	// TODO: order items here? groups first, then layers?
+	// without reordering
+	// for _, n := range tree {
+	// 	if n.IsGroup() {
+	// 		layers, err := TransformLayersTree(n.Children(), accept, transform)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		if len(layers) > 0 {
+	// 			ng := map[string]interface{}{"name": n.GroupName(), "layers": layers}
+	// 			list = append(list, ng)
+	// 		}
+	// 	} else if accept(n.LayerID()) {
+	// 		list = append(list, transform(n.LayerID()))
+	// 	}
+	// }
+
+	// with reordering - groups after layers
+	for _, n := range tree {
+		if !n.IsGroup() && accept(n.LayerID()) {
+			list = append(list, transform(n.LayerID()))
+		}
+	}
 	for _, n := range tree {
 		if n.IsGroup() {
 			layers, err := TransformLayersTree(n.Children(), accept, transform)
@@ -186,8 +207,6 @@ func TransformLayersTree(tree []TreeNode, accept func(id string) bool, transform
 				ng := map[string]interface{}{"name": n.GroupName(), "layers": layers}
 				list = append(list, ng)
 			}
-		} else if accept(n.LayerID()) {
-			list = append(list, transform(n.LayerID()))
 		}
 	}
 	return list, nil

@@ -344,8 +344,9 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	layers, err := domain.TransformLayersTree(
 		overlays,
 		func(id string) bool {
+			drawingOrder := indexOf(meta.LayersOrder, id)
 			// return !settings.Layers[id].Flags.Has("excluded") && rolesPerms.LayerFlags(id).Has("view")
-			return !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
+			return drawingOrder != -1 && !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
 		},
 		func(id string) interface{} {
 			lmeta := meta.Layers[id]
@@ -371,9 +372,9 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				Attribution: lmeta.Attribution,
 				Visible:     lmeta.Visible,
 			}
-			if drawingOrder := indexOf(meta.LayersOrder, id); drawingOrder != -1 {
-				ldata.DrawingOrder = &drawingOrder
-			}
+			drawingOrder := indexOf(meta.LayersOrder, id)
+			ldata.DrawingOrder = &drawingOrder
+
 			if lmeta.Type == "VectorLayer" {
 				json.Unmarshal(lmeta.Options["wkb_type"], &ldata.GeomType)
 
