@@ -32,24 +32,21 @@ type LayerNode struct {
 }
 
 type LayerMeta struct {
-	Id           string            `json:"id"`
-	Name         string            `json:"name"`
-	Title        string            `json:"title"`
-	Type         string            `json:"type"`
-	Extent       []float64         `json:"extent"`
-	Projection   string            `json:"projection"`
-	Flags        Flags             `json:"flags"`
-	LegendURL    string            `json:"legend_url,omitempty"`
-	Provider     string            `json:"provider_type"`
-	SourceParams map[string]string `json:"source_params"` // or map[string]string, or map[string]json.RawMessage, or json.RawMessage ??
-	Metadata     map[string]string `json:"metadata"`
-	Attribution  map[string]string `json:"attribution,omitempty"`
-	// Attributes   []map[string]interface{} `json:"attributes"`
-	Attributes   []LayerAttribute `json:"attributes"`
-	DrawingOrder int              `json:"drawing_order"`
-	// Options      map[string]interface{} `json:"options"`
-	Options map[string]json.RawMessage `json:"options"`
-	Visible bool                       `json:"visible"`
+	Id           string                     `json:"id"`
+	Name         string                     `json:"name"`
+	Title        string                     `json:"title"`
+	Type         string                     `json:"type"`
+	Extent       []float64                  `json:"extent"`
+	Projection   string                     `json:"projection"`
+	Flags        Flags                      `json:"flags"`
+	LegendURL    string                     `json:"legend_url,omitempty"`
+	Provider     string                     `json:"provider_type"`
+	SourceParams map[string]string          `json:"source_params"` // or map[string]json.RawMessage, or json.RawMessage ??
+	Metadata     map[string]string          `json:"metadata"`
+	Attribution  map[string]string          `json:"attribution,omitempty"`
+	Attributes   []LayerAttribute           `json:"attributes,omitempty"`
+	Options      map[string]json.RawMessage `json:"options,omitempty"`
+	Visible      bool                       `json:"visible"`
 }
 
 type LayerAttribute struct {
@@ -57,8 +54,7 @@ type LayerAttribute struct {
 	Name       string                 `json:"name"`
 	Type       string                 `json:"type"`
 	Constrains Flags                  `json:"constrains,omitempty"`
-	AllowNull  bool                   `json:"allow_null"` // todo: remove and use constrains
-	Widget     string                 `json:"widget"`
+	Widget     string                 `json:"widget,omitempty"`
 	Config     map[string]interface{} `json:"config,omitempty"`
 }
 
@@ -69,6 +65,7 @@ type QgisMeta struct {
 	Scales []float64 `json:"scales"`
 	// LayersTree        []TreeNode             `json:"layers_tree"`
 	LayersTree        []interface{}          `json:"layers_tree"`
+	LayersOrder       []string               `json:"layers_order"`
 	Layers            map[string]LayerMeta   `json:"layers"`
 	Projection        string                 `json:"projection"`
 	Projections       map[string]Projection  `json:"projections"`

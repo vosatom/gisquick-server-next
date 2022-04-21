@@ -228,7 +228,7 @@ type OverlayLayer struct {
 	Metadata             map[string]string       `json:"metadata"`
 	Attribution          map[string]string       `json:"attribution,omitempty"`
 	Attributes           []domain.LayerAttribute `json:"attributes,omitempty"`
-	DrawingOrder         int                     `json:"drawing_order"`
+	DrawingOrder         *int                    `json:"drawing_order,omitempty"`
 	Visible              bool                    `json:"visible"`
 	Hidden               bool                    `json:"hidden"`
 	Queryable            bool                    `json:"queryable"`
@@ -269,6 +269,15 @@ func MergeAttributeConfig(meta domain.LayerAttribute, settings domain.AttributeS
 	// if settings.Formatter != "" {
 	// }
 	return attr
+}
+
+func indexOf(items []string, value string) int {
+	for i, v := range items {
+		if v == value {
+			return i
+		}
+	}
+	return -1
 }
 
 func (s *projectService) GetMapConfig(projectName string, user domain.User) (map[string]interface{}, error) {
@@ -350,18 +359,20 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 			s.log.Infow("layer info", "layer", lmeta.Title, "type", lmeta.Type, "queryable", queryable, "attrs", len(lset.Attributes))
 
 			ldata := OverlayLayer{
-				Name:         lmeta.Name,
-				Title:        lmeta.Title,
-				Projection:   lmeta.Projection,
-				Type:         lmeta.Type,
-				Metadata:     lmeta.Metadata,
-				Hidden:       lset.Flags.Has("hidden"),
-				Queryable:    queryable,
-				InfoPanel:    lset.InfoPanelComponent,
-				LegendURL:    lmeta.LegendURL,
-				Attribution:  lmeta.Attribution,
-				DrawingOrder: lmeta.DrawingOrder,
-				Visible:      lmeta.Visible,
+				Name:        lmeta.Name,
+				Title:       lmeta.Title,
+				Projection:  lmeta.Projection,
+				Type:        lmeta.Type,
+				Metadata:    lmeta.Metadata,
+				Hidden:      lset.Flags.Has("hidden"),
+				Queryable:   queryable,
+				InfoPanel:   lset.InfoPanelComponent,
+				LegendURL:   lmeta.LegendURL,
+				Attribution: lmeta.Attribution,
+				Visible:     lmeta.Visible,
+			}
+			if drawingOrder := indexOf(meta.LayersOrder, id); drawingOrder != -1 {
+				ldata.DrawingOrder = &drawingOrder
 			}
 			if lmeta.Type == "VectorLayer" {
 				json.Unmarshal(lmeta.Options["wkb_type"], &ldata.GeomType)
