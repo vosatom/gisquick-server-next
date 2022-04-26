@@ -6,28 +6,27 @@ WORKDIR /src/sqlite
 RUN ./configure && make dbhash
 
 
-FROM golang:1.16-alpine as build
+FROM golang:1.18-alpine as build
 RUN apk add --no-cache git
 WORKDIR /go/src/app
 
-# https://github.com/golang/go/issues/44435
-# COPY ./go.mod ./go.sum ./
-# RUN go get -d -v ./...
-#RUN go list -test -deps ./...
-
 COPY go.mod go.sum ./
 RUN go mod download
-# RUN go mod graph | awk '{if ($1 !~ "@") print $2}' | xargs go get
 
 COPY . .
-
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /go/bin/gisquick cmd/main.go
 
 
 FROM alpine:latest
+
+ENV USERNAME=app
+ENV GROUP=app
+ENV UID=1000
+ENV GID=1000
+
 # USER nonroot:nonroot
 # COPY --from=build --chown=nonroot:nonroot /go/bin/app /app
-RUN addgroup -g 1000 -S app && adduser -u 1000 -S app -D -G app
+RUN addgroup -g "$GID" -S "$GROUP" && adduser -S -u "$UID" -D -G "$GROUP" "$USERNAME"
 
 COPY --from=dbhash-build /src/sqlite/dbhash /usr/local/bin/
 
@@ -35,7 +34,7 @@ WORKDIR /app
 COPY --from=build /go/src/app/templates ./templates
 COPY --from=build /go/bin/gisquick /usr/local/bin/
 
-USER app
+USER ${USERNAME}
 EXPOSE 3000
 # ENTRYPOINT ["gisquick"]
 CMD ["gisquick", "serve"]

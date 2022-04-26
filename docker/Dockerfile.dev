@@ -6,23 +6,25 @@ WORKDIR /src/sqlite
 RUN ./configure && make dbhash
 
 
-FROM golang:1.16-alpine
+FROM golang:1.18-alpine
+
+ENV USERNAME=app
+ENV GROUP=app
+ENV UID=1000
+ENV GID=1000
 
 ENV CGO_ENABLED=0
 RUN apk add --no-cache git
 
 COPY --from=dbhash-build /src/sqlite/dbhash /usr/local/bin/
 
-RUN addgroup -g 1000 -S app && adduser -u 1000 -S app -D -G app
-USER app
+RUN addgroup -g "$GID" -S "$GROUP" && adduser -S -u "$UID" -D -G "$GROUP" "$USERNAME"
+USER ${USERNAME}
 
 WORKDIR /go/server/
 
 COPY go.mod go.sum ./
-# RUN go mod download
-RUN go mod graph | awk '{if ($1 !~ "@") print $2}' | xargs go get
-
-COPY . .
+RUN go mod download
 
 EXPOSE 3000
 CMD ["go", "run", "cmd/main.go", "serve"]
