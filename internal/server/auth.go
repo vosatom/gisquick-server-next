@@ -24,7 +24,7 @@ func (s *Server) handleLogin() func(echo.Context) error {
 		}
 		user, err := s.auth.Authenticate(form.Username, form.Password)
 		if err != nil {
-			c.Logger().Errorf("authenticate: %v", err) // TODO: handle various types
+			// s.log.Errorw("authenticate", zap.Error(err)) // TODO: handle various types
 			return echo.NewHTTPError(http.StatusUnauthorized, "Please provide valid credentials")
 		}
 		if err := s.auth.LoginUser(c, user); err != nil {

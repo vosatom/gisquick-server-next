@@ -27,6 +27,7 @@ type Config struct {
 	SiteURL           string
 	SecretKey         string
 	SessionExpiration time.Duration
+	SignupAPI         bool
 }
 
 type Server struct {

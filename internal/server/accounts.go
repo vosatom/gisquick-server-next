@@ -147,7 +147,7 @@ func (s *Server) handleNewPassword() func(echo.Context) error {
 
 func (s *Server) handleChangePassword() func(echo.Context) error {
 	type ChangePasswordForm struct {
-		OldPassword        string `json:"old_password" form:"old_password" validate:"required,email"`
+		OldPassword        string `json:"old_password" form:"old_password" validate:"required"`
 		NewPassword        string `json:"new_password1" form:"new_password1" validate:"required"`
 		NewPasswordConfirm string `json:"new_password2" form:"new_password2" validate:"required"`
 	}

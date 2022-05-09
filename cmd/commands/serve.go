@@ -33,9 +33,10 @@ func Serve(log *zap.SugaredLogger) error {
 			ProjectsRoot string `conf:"default:/publish"`
 			MapCacheRoot string
 			MapserverURL string
+			SignupAPI    bool
 		}
 		Auth struct {
-			SessionExpiration time.Duration `conf:"default:12h"`
+			SessionExpiration time.Duration `conf:"default:24h"`
 			SecretKey         string        `conf:"default:secret-key,mask"`
 		}
 		Web struct {
@@ -130,6 +131,7 @@ func Serve(log *zap.SugaredLogger) error {
 		MapserverURL: cfg.Gisquick.MapserverURL,
 		MapCacheRoot: cfg.Gisquick.MapCacheRoot,
 		ProjectsRoot: cfg.Gisquick.ProjectsRoot,
+		SignupAPI:    cfg.Gisquick.SignupAPI,
 		SiteURL:      cfg.Web.SiteURL,
 	}
 

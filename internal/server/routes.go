@@ -16,9 +16,11 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 
 	e.GET("/api/users", s.handleGetUsers, LoginRequired)
 
-	e.POST("/api/accounts/signup", s.handleSignUp())
-	e.GET("/api/accounts/activate", s.handleActivateAccount()) // change to POST
-	e.GET("/api/accounts/check", s.handleCheckAvailability())
+	if s.Config.SignupAPI {
+		e.POST("/api/accounts/signup", s.handleSignUp())
+		e.POST("/api/accounts/activate", s.handleActivateAccount())
+		e.GET("/api/accounts/check", s.handleCheckAvailability())
+	}
 	e.POST("/api/accounts/password_reset", s.handlePasswordReset())
 	e.POST("/api/accounts/new_password", s.handleNewPassword())
 	e.POST("/api/accounts/change_password", s.handleChangePassword(), LoginRequired)

@@ -107,7 +107,7 @@ func NewAccount(username, email, firstName, lastName, password string) (Account,
 		return Account{}, fmt.Errorf("invalid username: '%s'", username)
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
-	if !validateEmail(email) {
+	if email != "" && !validateEmail(email) {
 		return Account{}, fmt.Errorf("invalid email: '%s'", email)
 	}
 	account := Account{
