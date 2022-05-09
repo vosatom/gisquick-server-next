@@ -258,7 +258,6 @@ func MergeAttributeConfig(meta domain.LayerAttribute, settings domain.AttributeS
 		Widget:     meta.Widget,
 		Config:     meta.Config,
 		Constrains: meta.Constrains,
-		// TODO: add Formatter
 	}
 	if settings.Widget != "" {
 		attr.Widget = settings.Widget
@@ -266,8 +265,9 @@ func MergeAttributeConfig(meta domain.LayerAttribute, settings domain.AttributeS
 	if len(settings.Config) > 0 {
 		attr.Config = settings.Config
 	}
-	// if settings.Formatter != "" {
-	// }
+	if settings.Formatter != "" {
+		attr.Format = settings.Formatter
+	}
 	return attr
 }
 
@@ -442,6 +442,9 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["projection"] = meta.Projection
 	data["projections"] = meta.Projections
 	data["units"] = meta.Units
+	if len(settings.Formatters) > 0 {
+		data["formatters"] = settings.Formatters
+	}
 
 	scripts, err := s.GetScripts(projectName)
 	if err != nil {

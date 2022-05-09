@@ -13,7 +13,7 @@ type LayerSettings struct {
 	Attributes           map[string]AttributeSettings `json:"attributes"`
 	InfoPanelComponent   string                       `json:"infopanel_component,omitempty"` // or group with other possible settings into generic map[string]interface{}
 	AttributeTableFields []string                     `json:"attr_table_fields,omitempty"`
-	InfoPanelFields      []string                     `json:"panel_fields,omitempty"`
+	InfoPanelFields      []string                     `json:"info_panel_fields,omitempty"`
 	ExportFields         []string                     `json:"export_fields,omitempty"`
 }
 
@@ -53,5 +53,5 @@ type ProjectSettings struct {
 	InitialExtent   []float64                `json:"initial_extent"`
 	Scales          json.RawMessage          `json:"scales"`
 	TileResolutions []float64                `json:"tile_resolutions"`
-	Formatters      json.RawMessage          `json:"formatters"`
+	Formatters      []json.RawMessage        `json:"formatters,omitempty"`
 }
