@@ -44,7 +44,8 @@ type LayerMeta struct {
 	SourceParams map[string]string          `json:"source_params"` // or map[string]json.RawMessage, or json.RawMessage ??
 	Metadata     map[string]string          `json:"metadata"`
 	Attribution  map[string]string          `json:"attribution,omitempty"`
-	Attributes   []LayerAttribute           `json:"attributes,omitempty"`
+	Attributes   []LayerAttribute           `json:"attributes,omitempty"` // vector layers
+	Bands        []string                   `json:"bands,omitempty"`      // raster layers
 	Options      map[string]json.RawMessage `json:"options,omitempty"`
 	Visible      bool                       `json:"visible"`
 }
@@ -56,6 +57,7 @@ type LayerAttribute struct {
 	Constrains Flags                  `json:"constrains,omitempty"`
 	Widget     string                 `json:"widget,omitempty"`
 	Config     map[string]interface{} `json:"config,omitempty"`
+	Format     string                 `json:"format,omitempty"`
 }
 
 type QgisMeta struct {

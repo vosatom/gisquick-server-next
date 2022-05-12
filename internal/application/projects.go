@@ -228,6 +228,7 @@ type OverlayLayer struct {
 	Metadata             map[string]string       `json:"metadata"`
 	Attribution          map[string]string       `json:"attribution,omitempty"`
 	Attributes           []domain.LayerAttribute `json:"attributes,omitempty"`
+	Bands                []string                `json:"bands,omitempty"`
 	DrawingOrder         *int                    `json:"drawing_order,omitempty"`
 	Visible              bool                    `json:"visible"`
 	Hidden               bool                    `json:"hidden"`
@@ -236,7 +237,7 @@ type OverlayLayer struct {
 	InfoPanel            string                  `json:"infopanel_component,omitempty"`
 	Permissions          domain.LayerPermission  `json:"permissions"`
 	AttributeTableFields []string                `json:"attr_table_fields,omitempty"`
-	InfoPanelFields      []string                `json:"panel_fields,omitempty"`
+	InfoPanelFields      []string                `json:"info_panel_fields,omitempty"`
 	ExportFields         []string                `json:"export_fields,omitempty"`
 }
 
@@ -357,9 +358,9 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 			}
 
 			queryable := lmeta.Flags.Has("query") && !lset.Flags.Has("hidden") && lflags.Has("query")
-			s.log.Infow("layer info", "layer", lmeta.Title, "type", lmeta.Type, "queryable", queryable, "attrs", len(lset.Attributes))
 
 			ldata := OverlayLayer{
+				Bands:       lmeta.Bands,
 				Name:        lmeta.Name,
 				Title:       lmeta.Title,
 				Projection:  lmeta.Projection,
