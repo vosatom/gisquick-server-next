@@ -179,7 +179,7 @@ func (s *projectService) GetLayersData(projectName string) (LayersData, error) {
 	}
 	var meta LayersMetadata
 	if err := s.GetQgisMetadata(projectName, &meta); err != nil {
-		return LayersData{}, nil
+		return LayersData{}, err
 	}
 	nameToID := make(map[string]string, len(meta.Layers))
 	for id, layer := range meta.Layers {
@@ -377,6 +377,22 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 
 			if lmeta.Type == "VectorLayer" {
 				json.Unmarshal(lmeta.Options["wkb_type"], &ldata.GeomType)
+				var wfsFlags domain.Flags
+				json.Unmarshal(lmeta.Options["wfs"], &wfsFlags)
+
+				editable := queryable && lmeta.Flags.Has("edit") && lset.Flags.Has("edit")
+				ldata.Permissions = domain.LayerPermission{
+					View:   queryable,
+					Insert: editable && wfsFlags.Has("insert"),
+					Delete: editable && wfsFlags.Has("delete"),
+					Update: editable && wfsFlags.Has("update"),
+				}
+				if rolesPerms != nil {
+					lperms := rolesPerms.LayerFlags(id)
+					ldata.Permissions.Insert = ldata.Permissions.Insert && lperms.Has("insert")
+					ldata.Permissions.Delete = ldata.Permissions.Delete && lperms.Has("delete")
+					ldata.Permissions.Update = ldata.Permissions.Update && lperms.Has("update")
+				}
 
 				// ldata.Attributes[0].Constrains
 				if queryable && len(lmeta.Attributes) > 0 {
@@ -390,12 +406,6 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 					// 	}
 					// }
 
-					ldata.Permissions = domain.LayerPermission{
-						View:   queryable,
-						Insert: queryable && lflags.Has("insert"),
-						Delete: queryable && lflags.Has("delete"),
-						Update: queryable && lflags.Has("update"),
-					}
 					if rolesPerms != nil {
 						attrsPerms := rolesPerms.AttributesFlags(id)
 						isAttributeVisible := func(item string) bool { return attrsPerms[item].Has("view") }
@@ -406,13 +416,13 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 						for _, a := range lmeta.Attributes {
 							if isAttributeVisible(a.Name) {
 								attr := MergeAttributeConfig(a, lset.Attributes[a.Name])
-								ldata.Attributes = append(ldata.Attributes, attr)
-								if !attrsPerms[a.Name].Has("edit") && attr.Constrains.Has("readonly") {
+								if !attrsPerms[a.Name].Has("edit") && !attr.Constrains.Has("readonly") {
 									attr.Constrains = attr.Constrains.Union(domain.Flags{"readonly"})
 								}
+								ldata.Attributes = append(ldata.Attributes, attr)
 							}
 						}
-						s.log.Infow("ldata.Attributes (perms)", "attrs", ldata.Attributes)
+						// s.log.Infow("ldata.Attributes (perms)", "attrs", ldata.Attributes)
 					} else {
 						ldata.AttributeTableFields = lset.AttributeTableFields
 						ldata.InfoPanelFields = lset.InfoPanelFields
@@ -422,7 +432,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 						for i, a := range lmeta.Attributes {
 							ldata.Attributes[i] = MergeAttributeConfig(a, lset.Attributes[a.Name])
 						}
-						s.log.Infow("ldata.Attributes", "attrs", ldata.Attributes)
+						// s.log.Infow("ldata.Attributes", "attrs", ldata.Attributes)
 					}
 				}
 			}
@@ -462,7 +472,6 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["ows_url"] = fmt.Sprintf("/api/map/ows/%s", projectName)
 	data["ows_project"] = projectName
 
-	s.log.Infow("topics", "user", user, "rolesPerms", rolesPerms)
 	topics := make([]domain.Topic, 0)
 	for _, topic := range settings.Topics {
 		layers := make([]string, 0)

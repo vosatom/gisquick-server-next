@@ -134,19 +134,19 @@ func (s *Server) owsHandler() func(echo.Context) error {
 			}
 			for _, u := range wfsTransaction.Updates {
 				if !getLayerPermissions(u.TypeName).Update {
-					return echo.ErrUnauthorized
+					return echo.ErrForbidden
 				}
 			}
 			for _, i := range wfsTransaction.Inserts {
 				for _, o := range i.Objects {
 					if !getLayerPermissions(o.XMLName.Local).Insert {
-						return echo.ErrUnauthorized
+						return echo.ErrForbidden
 					}
 				}
 			}
 			for _, d := range wfsTransaction.Deletes {
 				if !getLayerPermissions(d.TypeName).Delete {
-					return echo.ErrUnauthorized
+					return echo.ErrForbidden
 				}
 			}
 		}

@@ -110,7 +110,6 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 
 		if params.Service == "WFS" && params.Request == "" {
 
-			projectName := strings.TrimSuffix(params.Map, filepath.Ext(params.Map))
 			layersData, err := s.projects.GetLayersData(projectName)
 			if err != nil {
 				return err
@@ -126,13 +125,11 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 				lname := parts[len(parts)-1]
 				id, _ := layersData.LayerNameToID[lname]
 				perm, ok := perms[id]
-				if ok {
-					return perm
-				} else {
+				if !ok {
 					perm = settings.UserLayerPermissions(user, id)
 					perms[id] = perm
 				}
-				return domain.LayerPermission{View: false, Insert: false, Update: false, Delete: false}
+				return perm
 			}
 
 			var wfsTransaction Transaction
@@ -144,19 +141,19 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 			}
 			for _, u := range wfsTransaction.Updates {
 				if !getLayerPermissions(u.TypeName).Update {
-					return echo.ErrUnauthorized
+					return echo.ErrForbidden
 				}
 			}
 			for _, i := range wfsTransaction.Inserts {
 				for _, o := range i.Objects {
 					if !getLayerPermissions(o.XMLName.Local).Insert {
-						return echo.ErrUnauthorized
+						return echo.ErrForbidden
 					}
 				}
 			}
 			for _, d := range wfsTransaction.Deletes {
 				if !getLayerPermissions(d.TypeName).Delete {
-					return echo.ErrUnauthorized
+					return echo.ErrForbidden
 				}
 			}
 		}
