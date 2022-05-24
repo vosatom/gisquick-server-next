@@ -10,6 +10,7 @@ import (
 var (
 	ErrProjectNotExists     = errors.New("project does not exists")
 	ErrProjectAlreadyExists = errors.New("project already exists")
+	ErrProjectSize          = errors.New("project size is over limit")
 )
 
 // Old code, currently used in mapcache package
@@ -177,11 +178,15 @@ type ScriptModule struct {
 type Scripts map[string]ScriptModule
 
 type ProjectsRepository interface {
+	CheckProjectExists(name string) bool
 	Create(name string, qmeta json.RawMessage) (*ProjectInfo, error)
 	UserProjects(user string) ([]string, error) // or should it require User object?
 	GetProjectInfo(name string) (ProjectInfo, error)
 	Delete(name string) error
-	SaveFile(projectName, filename string, r io.Reader) error
+	// SaveFile(projectName, filename string, r io.Reader) error
+	CreateFile(projectName, pattern string, r io.Reader, size int64) (ProjectFile, error)
+	SaveFile(project string, finfo ProjectFile, path string) error
+
 	ListProjectFiles(project string, checksum bool) ([]ProjectFile, error)
 
 	ParseQgisMetadata(projectName string, data interface{}) error
@@ -196,5 +201,5 @@ type ProjectsRepository interface {
 	UpdateFiles(projectName string, info FilesChanges, next func() (string, io.ReadCloser, error)) ([]ProjectFile, error)
 	GetScripts(projectName string) (Scripts, error)
 	UpdateScripts(projectName string, scripts Scripts) error
-	GetScriptsPath(projectName string) string
+	Close()
 }

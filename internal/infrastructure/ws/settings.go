@@ -22,7 +22,7 @@ type message struct {
 
 /* Structure for managing websocket connections for concurrent access */
 type websocketsMap struct {
-	sync.Mutex
+	sync.RWMutex
 	name        string
 	connections map[string]*websocket.Conn
 }
@@ -39,8 +39,8 @@ func (w *websocketsMap) Set(key string, conn *websocket.Conn) {
 }
 
 func (w *websocketsMap) Get(key string) *websocket.Conn {
-	w.Lock()
-	defer w.Unlock()
+	w.RLock()
+	defer w.RUnlock()
 	return w.connections[key]
 }
 

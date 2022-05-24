@@ -28,6 +28,7 @@ type Config struct {
 	SecretKey         string
 	SessionExpiration time.Duration
 	SignupAPI         bool
+	MaxProjectSize    int64
 }
 
 type Server struct {
@@ -127,5 +128,6 @@ func (s *Server) ListenAndServe(addr string) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.projects.Close()
 	return s.echo.Shutdown(ctx)
 }

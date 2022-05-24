@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"strings"
 
-	"github.com/ReneKroon/ttlcache/v2"
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"go.uber.org/zap"
 )
@@ -17,7 +15,8 @@ type ProjectService interface {
 	Delete(projectName string) error
 	GetProjectInfo(projectName string) (domain.ProjectInfo, error)
 	GetUserProjects(username string) ([]domain.ProjectInfo, error)
-	SaveFile(projectName, filename string, r io.Reader) error
+	// SaveFile(projectName, filename string, r io.Reader) (string, error)
+	SaveFile(projectName, directory, filename string, r io.Reader, size int64) (string, error)
 	ListProjectFiles(projectName string, checksum bool) ([]domain.ProjectFile, error)
 
 	GetQgisMetadata(projectName string, data interface{}) error
@@ -37,20 +36,20 @@ type ProjectService interface {
 	GetScripts(projectName string) (domain.Scripts, error)
 	UpdateScripts(projectName string, scripts domain.Scripts) error
 	RemoveScripts(projectName string, modules ...string) (domain.Scripts, error)
-	GetScriptsPath(projectName string) string
+
+	Close()
 }
 
 type projectService struct {
-	log   *zap.SugaredLogger
-	repo  domain.ProjectsRepository
-	cache *ttlcache.Cache
+	log  *zap.SugaredLogger
+	repo domain.ProjectsRepository
+	// cache *ttlcache.Cache
 }
 
 func NewProjectsService(log *zap.SugaredLogger, repo domain.ProjectsRepository) *projectService {
 	return &projectService{
-		log:   log,
-		repo:  repo,
-		cache: ttlcache.NewCache(),
+		log:  log,
+		repo: repo,
 	}
 }
 
@@ -96,8 +95,19 @@ func (s *projectService) GetUserProjects(username string) ([]domain.ProjectInfo,
 	return data, nil
 }
 
-func (s *projectService) SaveFile(projectName, filename string, r io.Reader) error {
-	return s.repo.SaveFile(projectName, filename, r)
+func (s *projectService) SaveFile(projectName, directory, filename string, r io.Reader, size int64) (string, error) {
+	finfo, err := s.repo.CreateFile(projectName, "media_", r, size)
+	if err != nil {
+		return "", fmt.Errorf("saving to temp file: %w", err)
+	}
+	s.log.Debugw("saved to temp file", "info", finfo)
+	// filename := strings.TrimSuffix(filepath.Base(finfo.Path), filepath.Ext(finfo.Path))
+	path := filepath.Join(directory, filepath.Base(finfo.Path)+filepath.Ext(filename))
+	if err = s.repo.SaveFile(projectName, finfo, path); err != nil {
+		// maybe delete temp file?
+		return "", fmt.Errorf("saving project file: %w", err)
+	}
+	return path, nil
 }
 
 func (s *projectService) GetQgisMetadata(projectName string, data interface{}) error {
@@ -147,17 +157,12 @@ func (s *projectService) RemoveScripts(projectName string, modules ...string) (d
 		files[i] = filepath.Join("web", meta.Path)
 		delete(scripts, m)
 	}
-	s.log.Infow("RemoveScripts", "files", files, "scripts", scripts)
 	changes := domain.FilesChanges{Removes: files}
 	_, err = s.UpdateFiles(projectName, changes, nil)
 	if err != nil {
 		return nil, err
 	}
 	return scripts, s.UpdateScripts(projectName, scripts)
-}
-
-func (s *projectService) GetScriptsPath(projectName string) string {
-	return s.repo.GetScriptsPath(projectName)
 }
 
 func contains(items []string, value string) bool {
@@ -201,16 +206,16 @@ func (s *projectService) GetLayerPermissions(projectName string, layerId string,
 }
 
 type BaseLayer struct {
-	Name         string            `json:"name"`
-	Title        string            `json:"title"`
-	Type         string            `json:"type"`
-	Projection   string            `json:"projection"`
-	LegendURL    string            `json:"legend_url,omitempty"`
-	Metadata     map[string]string `json:"metadata"`
-	Attribution  map[string]string `json:"attribution,omitempty"`
-	Extent       []float64         `json:"extent"`
-	Provider     string            `json:"provider_type"`
-	SourceParams map[string]string `json:"source"`
+	Name         string                     `json:"name"`
+	Title        string                     `json:"title"`
+	Type         string                     `json:"type"`
+	Projection   string                     `json:"projection"`
+	LegendURL    string                     `json:"legend_url,omitempty"`
+	Metadata     map[string]string          `json:"metadata"`
+	Attribution  map[string]string          `json:"attribution,omitempty"`
+	Extent       []float64                  `json:"extent"`
+	Provider     string                     `json:"provider_type"`
+	SourceParams map[string]json.RawMessage `json:"source"`
 
 	// WMS params, old API
 	URL       string   `json:"url"`
@@ -281,6 +286,55 @@ func indexOf(items []string, value string) int {
 	return -1
 }
 
+func TransformLayersTree(tree []domain.TreeNode, accept func(id string) bool, transform func(id string) interface{}) ([]interface{}, error) {
+	list := make([]interface{}, 0)
+	// without reordering
+	// for _, n := range tree {
+	// 	if n.IsGroup() {
+	// 		layers, err := TransformLayersTree(n.Children(), accept, transform)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		if len(layers) > 0 {
+	// 			g := n.(domain.GroupTreeNode)
+	// 			ng := map[string]interface{}{
+	// 				"name":               n.GroupName(),
+	// 				"layers":             layers,
+	// 				"mutually_exclusive": g.MutuallyExclusive,
+	// 			}
+	// 			list = append(list, ng)
+	// 		}
+	// 	} else if accept(n.LayerID()) {
+	// 		list = append(list, transform(n.LayerID()))
+	// 	}
+	// }
+
+	// with reordering - groups after layers
+	for _, n := range tree {
+		if !n.IsGroup() && accept(n.LayerID()) {
+			list = append(list, transform(n.LayerID()))
+		}
+	}
+	for _, n := range tree {
+		if n.IsGroup() {
+			layers, err := TransformLayersTree(n.Children(), accept, transform)
+			if err != nil {
+				return nil, err
+			}
+			if len(layers) > 0 {
+				g := n.(domain.GroupTreeNode)
+				ng := map[string]interface{}{
+					"name":               n.GroupName(),
+					"layers":             layers,
+					"mutually_exclusive": g.MutuallyExclusive,
+				}
+				list = append(list, ng)
+			}
+		}
+	}
+	return list, nil
+}
+
 func (s *projectService) GetMapConfig(projectName string, user domain.User) (map[string]interface{}, error) {
 	var meta domain.QgisMeta
 	if err := s.repo.ParseQgisMetadata(projectName, &meta); err != nil {
@@ -314,7 +368,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 
 	rolesPerms := domain.NewUserRolesPermissions(user, settings.Auth)
 
-	baseLayersData, err := domain.TransformLayersTree(
+	baseLayersData, err := TransformLayersTree(
 		baseLayers,
 		func(id string) bool {
 			return !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
@@ -334,20 +388,21 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				SourceParams: lmeta.SourceParams,
 			}
 			if lmeta.Type == "RasterLayer" && lmeta.Provider == "wms" {
-				ldata.Format = string(lmeta.SourceParams["format"])
-				ldata.URL = string(lmeta.SourceParams["url"])
-				ldata.WmsLayers = strings.Split(string(lmeta.SourceParams["layers"]), ",")
+				ldata.Format = lmeta.SourceParams.String("format")
+				ldata.URL = lmeta.SourceParams.String("url")
+				ldata.WmsLayers = lmeta.SourceParams.StringArray("layers")
 			}
 			return ldata
 		},
 	)
 
-	layers, err := domain.TransformLayersTree(
+	layers, err := TransformLayersTree(
 		overlays,
 		func(id string) bool {
-			drawingOrder := indexOf(meta.LayersOrder, id)
+			// drawingOrder := indexOf(meta.LayersOrder, id)
 			// return !settings.Layers[id].Flags.Has("excluded") && rolesPerms.LayerFlags(id).Has("view")
-			return drawingOrder != -1 && !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
+			// return drawingOrder != -1 && !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
+			return !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
 		},
 		func(id string) interface{} {
 			lmeta := meta.Layers[id]
@@ -373,8 +428,21 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				Attribution: lmeta.Attribution,
 				Visible:     lmeta.Visible,
 			}
-			drawingOrder := indexOf(meta.LayersOrder, id)
-			ldata.DrawingOrder = &drawingOrder
+			// if !lset.Flags.Has("render_off") {
+			// 	drawingOrder := indexOf(meta.LayersOrder, id)
+			// 	ldata.DrawingOrder = &drawingOrder
+			// } else {
+			// 	ldata.Visible = false
+			// }
+			drawingOrder := -1
+			if !lset.Flags.Has("render_off") {
+				drawingOrder = indexOf(meta.LayersOrder, id)
+			}
+			if drawingOrder != -1 {
+				ldata.DrawingOrder = &drawingOrder
+			} else {
+				ldata.Visible = false
+			}
 
 			if lmeta.Type == "VectorLayer" {
 				json.Unmarshal(lmeta.Options["wkb_type"], &ldata.GeomType)
@@ -496,4 +564,8 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 
 	// s.log.Infow("[GetMapConfig]", "layers", meta.Layers)
 	return data, nil
+}
+
+func (s *projectService) Close() {
+	s.repo.Close()
 }

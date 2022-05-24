@@ -8,7 +8,9 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ardanlabs/conf/v2"
@@ -23,17 +25,51 @@ import (
 	"github.com/gisquick/gisquick-server/internal/server/auth"
 	"github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-func Serve(log *zap.SugaredLogger) error {
+func parseByteSize(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	factor := 1
+	if strings.HasSuffix(value, "M") {
+		factor = 1024 * 1024
+	} else if strings.HasSuffix(value, "G") {
+		factor = 1024 * 1024 * 1024
+	}
+	num, err := strconv.Atoi(strings.TrimRight(value, "MGB"))
+	if err != nil {
+		return -1, fmt.Errorf("Invalid byte size: %s", value)
+	}
+	return int64(num * factor), nil
+}
+
+type ByteSize int64
+
+// Satisfy the flag package Value interface.
+func (b *ByteSize) Set(s string) error {
+	bs, err := parseByteSize(s)
+	if err != nil {
+		return err
+	}
+	*b = ByteSize(bs)
+	return nil
+}
+
+// Satisfy the encoding.TextUnmarshaler interface.
+func (b *ByteSize) UnmarshalText(text []byte) error {
+	return b.Set(string(text))
+}
+
+func Serve() error {
 	cfg := struct {
 		Gisquick struct {
-			Debug        bool   `conf:"default:false"`
-			Language     string `conf:"default:en-us"`
-			ProjectsRoot string `conf:"default:/publish"`
-			MapCacheRoot string
-			MapserverURL string
-			SignupAPI    bool
+			Debug          bool   `conf:"default:false"`
+			Language       string `conf:"default:en-us"`
+			ProjectsRoot   string `conf:"default:/publish"`
+			MapCacheRoot   string
+			MapserverURL   string
+			SignupAPI      bool
+			MaxProjectSize ByteSize
 		}
 		Auth struct {
 			SessionExpiration time.Duration `conf:"default:24h"`
@@ -83,6 +119,17 @@ func Serve(log *zap.SugaredLogger) error {
 		}
 		return fmt.Errorf("parsing config: %w", err)
 	}
+	logLevel := zap.InfoLevel
+	if cfg.Gisquick.Debug {
+		logLevel = zap.DebugLevel
+	}
+	log, err := createLogger(logLevel)
+	if err != nil {
+		return fmt.Errorf("failed to create logger: %w", err)
+		// fmt.Printf("failed to create logger: %v", err)
+		// os.Exit(1)
+	}
+
 	out, err := conf.String(&cfg)
 	if err != nil {
 		return fmt.Errorf("generating config for output: %w", err)
@@ -127,12 +174,13 @@ func Serve(log *zap.SugaredLogger) error {
 	es := mock.NewDummyEmailService()
 
 	conf := server.Config{
-		Language:     cfg.Gisquick.Language,
-		MapserverURL: cfg.Gisquick.MapserverURL,
-		MapCacheRoot: cfg.Gisquick.MapCacheRoot,
-		ProjectsRoot: cfg.Gisquick.ProjectsRoot,
-		SignupAPI:    cfg.Gisquick.SignupAPI,
-		SiteURL:      cfg.Web.SiteURL,
+		Language:       cfg.Gisquick.Language,
+		MapserverURL:   cfg.Gisquick.MapserverURL,
+		MapCacheRoot:   cfg.Gisquick.MapCacheRoot,
+		ProjectsRoot:   cfg.Gisquick.ProjectsRoot,
+		SignupAPI:      cfg.Gisquick.SignupAPI,
+		SiteURL:        cfg.Web.SiteURL,
+		MaxProjectSize: int64(cfg.Gisquick.MaxProjectSize),
 	}
 
 	// Services
@@ -148,7 +196,8 @@ func Serve(log *zap.SugaredLogger) error {
 	sessionStore := auth.NewRedisStore(rdb)
 	authServ := auth.NewAuthService(log, siteURL.Hostname(), cfg.Auth.SessionExpiration, accountsRepo, sessionStore)
 
-	projectsRepo := project.NewDiskStorage(log, filepath.Join(cfg.Gisquick.ProjectsRoot))
+	projectsRepo := project.NewDiskStorage(log, cfg.Gisquick.ProjectsRoot)
+	projectsRepo.MaxProjectSize = int64(cfg.Gisquick.MaxProjectSize)
 	projectsServ := application.NewProjectsService(log, projectsRepo)
 
 	sws := ws.NewSettingsWS(log)
@@ -163,12 +212,32 @@ func Serve(log *zap.SugaredLogger) error {
 	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 10 seconds.
 	// Use a buffered channel to avoid missing signals as recommended for signal.Notify
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
+	signal.Notify(quit, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	log.Infof("Received shutdown signal")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := s.Shutdown(ctx); err != nil {
 		log.Fatal(err)
 	}
+	log.Sync()
 	return nil
+}
+
+func createLogger(level zapcore.Level) (*zap.SugaredLogger, error) {
+	config := zap.NewProductionConfig()
+	// config := zap.NewDevelopmentConfig()
+
+	// config.OutputPaths = []string{"stdout"}
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	config.DisableStacktrace = true
+	config.Level.SetLevel(level)
+
+	logger, err := config.Build()
+	if err != nil {
+		return nil, err
+	}
+	defer logger.Sync()
+	log := logger.Sugar()
+	return log, nil
 }

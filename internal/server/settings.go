@@ -111,10 +111,7 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		if err != nil {
 			return err
 		}
-		if !user.IsSuperuser {
-			MaxProjectSize := int64(500 * 1024 * 1024) // TODO
-			req.Body = http.MaxBytesReader(c.Response(), req.Body, MaxProjectSize)
-		}
+		req.Body = http.MaxBytesReader(c.Response(), req.Body, s.Config.MaxProjectSize)
 		reader := multipart.NewReader(req.Body, boundary)
 		projectName := c.Get("project").(string)
 
@@ -159,6 +156,11 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		}
 		changes := domain.FilesChanges{Updates: info.Files}
 		if _, err := s.projects.UpdateFiles(projectName, changes, nextFile); err != nil {
+			// better check in future release https://github.com/golang/go/issues/30715
+			if errors.Is(err, domain.ErrProjectSize) || err.Error() == "http: request body too large" {
+				// s.log.Warn("uploading files: max limit reached")
+				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached project size limit.")
+			}
 			return err
 		}
 		// finish reading from stream
@@ -330,7 +332,7 @@ func (s *Server) handleGetProjectFullInfo() func(echo.Context) error {
 		Created    time.Time       `json:"created"`
 		LastUpdate time.Time       `json:"last_update"`
 		State      string          `json:"state"`
-		Size       int             `json:"size"`
+		Size       int64           `json:"size"`
 		Thumbnail  bool            `json:"thumbnail"`
 		Meta       domain.QgisMeta `json:"meta"`
 		// Meta     json.RawMessage         `json:"meta"`
@@ -465,15 +467,6 @@ func (s *Server) handleGetThumbnail(c echo.Context) error {
 	return c.File(s.projects.GetThumbnailPath(projectName))
 }
 
-func (s *Server) handleProjectStaticFile(c echo.Context) error {
-	username := c.Param("user")
-	name := c.Param("name")
-	projectName := filepath.Join(username, name)
-	scriptPath := c.Param("*")
-	root := s.projects.GetScriptsPath(projectName)
-	return c.File(filepath.Join(root, scriptPath))
-}
-
 func (s *Server) handleScriptUpload() func(echo.Context) error {
 	type Data struct {
 		domain.ScriptModule
@@ -527,17 +520,19 @@ func (s *Server) handleScriptUpload() func(echo.Context) error {
 			return path, file, nil
 		}
 		if _, err := s.projects.UpdateFiles(projectName, changes, nextFile); err != nil {
+			if errors.Is(err, domain.ErrProjectSize) {
+				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached project size limit.")
+			}
 			return fmt.Errorf("[handleScriptUpload] saving script file: %w", err)
 		}
 		scripts, err := s.projects.GetScripts(projectName)
 		if err != nil {
 			return fmt.Errorf("[handleScriptUpload] getting scripts metadata: %w", err)
 		}
-		s.log.Infow("handleScriptUpload", "scripts", scripts)
 		if scripts == nil {
 			scripts = make(domain.Scripts, 1)
 		}
-		info.Path = filepath.Join("components", info.Path)
+		info.Path = filepath.Join("web", "components", info.Path)
 		scripts[info.Module] = info.ScriptModule
 		// s.log.Infow("[handleScriptUpload]", "scripts", scripts)
 
@@ -664,4 +659,104 @@ func (s *Server) handleProjectReload(c echo.Context) error {
 		return fmt.Errorf("reloading project on qgis server: %s", string(msg))
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+func (s *Server) handleMediaFileUpload(c echo.Context) error {
+	projectName := c.Get("project").(string)
+	directory := c.Param("*")
+	// directory := c.QueryParam("directory")
+
+	if err := c.Request().ParseMultipartForm(2 * MB); err != nil {
+		return err
+	}
+	var filesMeta []domain.ProjectFile = []domain.ProjectFile{}
+	var files []*multipart.FileHeader = []*multipart.FileHeader{}
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		return fmt.Errorf("parsing MultipartForm data: %w", err)
+	}
+	for n, f := range form.File {
+		s.log.Infow("[handleMediaFileUpload]", "file", n, "len", len(f))
+		for _, fh := range f {
+			path := filepath.Join(directory, fh.Filename)
+			filesMeta = append(filesMeta, domain.ProjectFile{Path: path, Size: fh.Size})
+			files = append(files, fh)
+		}
+	}
+	changes := domain.FilesChanges{Updates: filesMeta}
+	s.log.Infow("[handleMediaFileUpload]", "directory", directory, "changes", changes)
+	if true {
+		return nil
+	}
+
+	findex := 0
+	nextFile := func() (string, io.ReadCloser, error) { // or ReadCloser?
+		if findex >= len(files) || findex >= len(filesMeta) {
+			return "", nil, io.EOF
+		}
+		f := files[findex]
+		path := filesMeta[findex].Path
+		file, err := f.Open()
+		if err != nil {
+			return "", nil, err
+		}
+		findex += 1
+		return path, file, nil
+	}
+	if _, err := s.projects.UpdateFiles(projectName, changes, nextFile); err != nil {
+		return fmt.Errorf("[handleMediaFileUpload] saving script file: %w", err)
+	}
+	return nil
+}
+
+func (s *Server) handleGetMediaFile(c echo.Context) error {
+	projectName := c.Get("project").(string)
+	filePath := c.Param("*")
+	// user, err := s.auth.GetUser(c)
+	// if err != nil {
+	// 	return err
+	// }
+	folder := filepath.Dir(filePath)
+	// mediaFolders := []string{"web"}
+	// for _, mediaFolder := range mediaFolders {
+	// 	relPath, _ := filepath.Rel(mediaFolder, folder)
+	// 	s.log.Infow("test", "relative", relPath)
+	// }
+
+	if !strings.HasPrefix(folder, "web/") {
+		// return echo.ErrForbidden
+		return echo.ErrNotFound
+	}
+	return c.File(filepath.Join(s.Config.ProjectsRoot, projectName, filePath))
+}
+
+func (s *Server) handleUploadMediaFile(c echo.Context) error {
+	projectName := c.Get("project").(string)
+	directory := c.Param("*")
+	file, err := c.FormFile("file")
+	if err != nil {
+		return fmt.Errorf("reading file: %w", err)
+	}
+	if !strings.HasPrefix(directory, "web/") {
+		return echo.ErrForbidden
+	}
+
+	// user, err := s.auth.GetUser(c)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// TODO: check directory access
+	// s.projects.GetDirectoryPerms(user)
+	src, err := file.Open()
+	if err != nil {
+		return fmt.Errorf("reading upload file: %w", err)
+	}
+	// "*"+filepath.Ext(filename)
+	path, err := s.projects.SaveFile(projectName, directory, file.Filename, src, file.Size)
+	if err != nil {
+		return err
+	}
+	return c.String(http.StatusOK, path)
 }

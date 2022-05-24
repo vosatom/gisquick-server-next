@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ReneKroon/ttlcache/v2"
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/go-redis/redis/v8"
 	"github.com/gofrs/uuid"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
@@ -64,15 +64,30 @@ type AuthService struct {
 	expiration time.Duration
 	accounts   domain.AccountsRepository
 	store      SessionStore
-	cache      *ttlcache.Cache
+	cache      *ttlcache.Cache[string, domain.Account]
 }
 
-func NewAuthService(logger *zap.SugaredLogger, domain string, expiration time.Duration, accounts domain.AccountsRepository, store SessionStore) *AuthService {
-	cache := ttlcache.NewCache()
-	cache.SkipTTLExtensionOnHit(true)
+func NewAuthService(logger *zap.SugaredLogger, serverDomain string, expiration time.Duration, accounts domain.AccountsRepository, store SessionStore) *AuthService {
+	loader := ttlcache.LoaderFunc[string, domain.Account](
+		func(c *ttlcache.Cache[string, domain.Account], username string) *ttlcache.Item[string, domain.Account] {
+			logger.Infof("ttlcache.LoaderFunc: %s", username)
+			account, err := accounts.GetByUsername(username)
+			if err != nil {
+				logger.Errorw("getting account", "username", username, zap.Error(err))
+				return nil
+			}
+			item := c.Set(username, account, ttlcache.DefaultTTL)
+			return item
+		},
+	)
+	cache := ttlcache.New(
+		ttlcache.WithTTL[string, domain.Account](45*time.Second),
+		ttlcache.WithLoader[string, domain.Account](loader),
+		ttlcache.WithDisableTouchOnHit[string, domain.Account](),
+	)
 	return &AuthService{
 		logger:     logger,
-		domain:     domain,
+		domain:     serverDomain,
 		expiration: expiration,
 		accounts:   accounts,
 		store:      store,
@@ -110,28 +125,6 @@ func (s *AuthService) GetSessionInfo(c echo.Context) (*SessionInfo, error) {
 	return &si, nil
 }
 
-func (s *AuthService) loadUserAccount(username string) (interface{}, time.Duration, error) {
-	log.Println("loadUserAccount", username)
-	s.logger.Infow("loadUserAccount", "name", username)
-	account, err := s.accounts.GetByUsername(username)
-	ttl := time.Second * 45
-	return account, ttl, err
-}
-
-func (s *AuthService) getUserAccount(username string) (domain.Account, error) {
-	// loadFn := func(key string) (interface{}, time.Duration, error) {
-	// 	log.Println("getUserAccount", username)
-	// 	account, err := s.accounts.GetByUsername(username)
-	// 	return account, 5 * time.Minute, err
-	// }
-	// a, err := s.cache.GetByLoader(username, loadFn)
-	a, err := s.cache.GetByLoader(username, s.loadUserAccount)
-	// if err != nil {
-	// 	return domain.Account{}, err
-	// }
-	return a.(domain.Account), err
-}
-
 func (s *AuthService) GetUser(c echo.Context) (domain.User, error) {
 	u, saved := c.Get("user").(domain.User)
 	if saved {
@@ -144,12 +137,14 @@ func (s *AuthService) GetUser(c echo.Context) (domain.User, error) {
 	if session == nil {
 		return domain.User{IsGuest: true}, nil
 	}
-	// account, err := s.accounts.GetByUsername(session.Username)
-	account, err := s.getUserAccount(session.Username)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("auth: get session user: %w", err)
 	}
-	u = AccountToUser(account)
+	item := s.cache.Get(session.Username)
+	if item == nil {
+		return domain.User{IsGuest: true}, nil
+	}
+	u = AccountToUser(item.Value())
 	c.Set("user", u)
 	return u, nil
 }

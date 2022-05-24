@@ -21,7 +21,7 @@ type ProjectInfo struct {
 	Authentication string    `json:"authentication"`
 	// empty, pending update, hidden
 	State     string `json:"state"`
-	Size      int    `json:"size"` // size in bytes
+	Size      int64  `json:"size"` // size in bytes
 	Thumbnail bool   `json:"thumbnail"`
 }
 
@@ -41,7 +41,7 @@ type LayerMeta struct {
 	Flags        Flags                      `json:"flags"`
 	LegendURL    string                     `json:"legend_url,omitempty"`
 	Provider     string                     `json:"provider_type"`
-	SourceParams map[string]string          `json:"source_params"` // or map[string]json.RawMessage, or json.RawMessage ??
+	SourceParams QueryParams                `json:"source_params"`
 	Metadata     map[string]string          `json:"metadata"`
 	Attribution  map[string]string          `json:"attribution,omitempty"`
 	Attributes   []LayerAttribute           `json:"attributes,omitempty"` // vector layers
@@ -101,8 +101,9 @@ func (l LayerTreeNode) Children() []TreeNode {
 }
 
 type GroupTreeNode struct {
-	Name   string     `json:"name"`
-	Layers []TreeNode `json:"layers"`
+	Name              string     `json:"name"`
+	Layers            []TreeNode `json:"layers"`
+	MutuallyExclusive bool       `json:"mutually_exclusive,omitempty"`
 }
 
 func (g GroupTreeNode) LayerID() string {
@@ -138,7 +139,7 @@ func createTree(items []interface{}) ([]TreeNode, error) {
 			if err != nil {
 				return nil, ErrInvalidTree
 			}
-			nodes[i] = GroupTreeNode{name, subtree}
+			nodes[i] = GroupTreeNode{Name: name, Layers: subtree}
 		default:
 			return nil, ErrInvalidTree
 		}
@@ -163,7 +164,8 @@ func CreateTree2(items []interface{}) ([]TreeNode, error) {
 			if err != nil {
 				return nil, ErrInvalidTree
 			}
-			nodes[i] = GroupTreeNode{name, subtree}
+			mutuallyExclusive, ok := o["mutually_exclusive"].(bool)
+			nodes[i] = GroupTreeNode{Name: name, Layers: subtree, MutuallyExclusive: mutuallyExclusive}
 		} else {
 			id, ok := o["id"].(string)
 			if !ok {
@@ -173,43 +175,4 @@ func CreateTree2(items []interface{}) ([]TreeNode, error) {
 		}
 	}
 	return nodes, nil
-}
-
-func TransformLayersTree(tree []TreeNode, accept func(id string) bool, transform func(id string) interface{}) ([]interface{}, error) {
-	list := make([]interface{}, 0)
-	// without reordering
-	// for _, n := range tree {
-	// 	if n.IsGroup() {
-	// 		layers, err := TransformLayersTree(n.Children(), accept, transform)
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}
-	// 		if len(layers) > 0 {
-	// 			ng := map[string]interface{}{"name": n.GroupName(), "layers": layers}
-	// 			list = append(list, ng)
-	// 		}
-	// 	} else if accept(n.LayerID()) {
-	// 		list = append(list, transform(n.LayerID()))
-	// 	}
-	// }
-
-	// with reordering - groups after layers
-	for _, n := range tree {
-		if !n.IsGroup() && accept(n.LayerID()) {
-			list = append(list, transform(n.LayerID()))
-		}
-	}
-	for _, n := range tree {
-		if n.IsGroup() {
-			layers, err := TransformLayersTree(n.Children(), accept, transform)
-			if err != nil {
-				return nil, err
-			}
-			if len(layers) > 0 {
-				ng := map[string]interface{}{"name": n.GroupName(), "layers": layers}
-				list = append(list, ng)
-			}
-		}
-	}
-	return list, nil
 }
