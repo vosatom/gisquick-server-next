@@ -26,5 +26,7 @@ WORKDIR /go/server/
 COPY go.mod go.sum ./
 RUN go mod download
 
+COPY ./docker/start-dev.sh /usr/local/bin/
+
 EXPOSE 3000
-CMD ["go", "run", "cmd/main.go", "serve"]
+CMD ["start-dev.sh"]
