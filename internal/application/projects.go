@@ -521,6 +521,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["projection"] = meta.Projection
 	data["projections"] = meta.Projections
 	data["units"] = meta.Units
+	data["print_composers"] = meta.ComposerTemplates // TODO: filter by permissions
 	if len(settings.Formatters) > 0 {
 		data["formatters"] = settings.Formatters
 	}
@@ -542,7 +543,15 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["ows_project"] = projectName
 
 	topics := make([]domain.Topic, 0)
+
+	var visibleTopics []string
+	if rolesPerms != nil {
+		visibleTopics = rolesPerms.UserTopics()
+	}
 	for _, topic := range settings.Topics {
+		if visibleTopics != nil && !contains(visibleTopics, topic.ID) {
+			continue
+		}
 		layers := make([]string, 0)
 		for _, lid := range topic.Layers {
 			lset := settings.Layers[lid]

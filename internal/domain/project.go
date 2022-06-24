@@ -53,6 +53,7 @@ type UserRolesPermissions struct {
 	roles      []ProjectRole // user roles
 	layers     map[string]Flags
 	attributes map[string]map[string]Flags
+	topics     []string
 }
 
 func NewUserRolesPermissions(user User, auth Authentication) *UserRolesPermissions {
@@ -71,9 +72,13 @@ func (p *UserRolesPermissions) LayerFlags(layerId string) Flags {
 	// }
 	flags, exists := p.layers[layerId]
 	if !exists {
-		flags = p.roles[0].Permissions.Layers[layerId]
-		for _, f := range p.roles[1:] {
-			flags = flags.Union(f.Permissions.Layers[layerId])
+		if len(p.roles) == 0 {
+			flags = Flags{}
+		} else {
+			flags = p.roles[0].Permissions.Layers[layerId]
+			for _, f := range p.roles[1:] {
+				flags = flags.Union(f.Permissions.Layers[layerId])
+			}
 		}
 		p.layers[layerId] = flags
 	}
@@ -81,9 +86,6 @@ func (p *UserRolesPermissions) LayerFlags(layerId string) Flags {
 }
 
 func (p *UserRolesPermissions) AttributesFlags(layerId string) map[string]Flags {
-	// if len(p.roles) == 0 {
-	// 	return Flags([]string{})
-	// }
 	flagsMap, exists := p.attributes[layerId]
 	if !exists {
 		flagsMap = p.roles[0].Permissions.Attributes[layerId]
@@ -96,6 +98,17 @@ func (p *UserRolesPermissions) AttributesFlags(layerId string) map[string]Flags 
 		p.attributes[layerId] = flagsMap
 	}
 	return flagsMap
+}
+
+func (p *UserRolesPermissions) UserTopics() []string {
+	if p.topics == nil {
+		topics := Flags{}
+		for _, r := range p.roles {
+			topics = topics.Union(r.Permissions.Topics)
+		}
+		p.topics = topics
+	}
+	return p.topics
 }
 
 func (s ProjectSettings) UserLayerPermissions(u User, layerId string) LayerPermission {

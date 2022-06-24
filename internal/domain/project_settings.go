@@ -18,6 +18,7 @@ type LayerSettings struct {
 }
 
 type Topic struct {
+	ID       string   `json:"id"`
 	Title    string   `json:"title"`
 	Abstract string   `json:"abstract"`
 	Layers   []string `json:"visible_overlays"`
@@ -33,6 +34,7 @@ type ProjectRole struct {
 type RolePermissions struct {
 	Attributes map[string]map[string]Flags `json:"attributes"`
 	Layers     map[string]Flags            `json:"layers"`
+	Topics     []string                    `json:"topics"`
 }
 
 type Authentication struct {
