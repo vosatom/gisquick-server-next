@@ -578,12 +578,12 @@ func CopyFile(dest io.Writer, path string) error {
 	return err
 }
 
-func (s *Server) handleDownloadProjectFile(c echo.Context) error {
+func (s *Server) handleDownloadProjectFiles(c echo.Context) error {
 	projectName := c.Get("project").(string)
 	filePath := c.Param("*")
 	fullPath := filepath.Join(s.Config.ProjectsRoot, projectName, filePath)
 
-	name := filepath.Base(filePath)
+	name := filepath.Base(fullPath)
 
 	info, err := os.Lstat(fullPath)
 	if err != nil {

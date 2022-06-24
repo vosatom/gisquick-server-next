@@ -50,7 +50,8 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.DELETE("/api/project/script/:user/:name", s.handleDeleteScript(), ProjectAdminAccess)
 
 	e.GET("/api/project/file/:user/:name/*", s.handleProjectFile, ProjectAdminAccess)
-	e.GET("/api/project/download/:user/:name/*", s.handleDownloadProjectFile, ProjectAdminAccess)
+	e.GET("/api/project/download/:user/:name", s.handleDownloadProjectFiles, ProjectAdminAccess)
+	e.GET("/api/project/download/:user/:name/*", s.handleDownloadProjectFiles, ProjectAdminAccess)
 	e.GET("/api/project/inline/:user/:name/*", s.handleInlineProjectFile, ProjectAdminAccess)
 
 	e.POST("/api/project/meta/:user/:name", s.handleUpdateProjectMeta(), ProjectAdminAccess)
