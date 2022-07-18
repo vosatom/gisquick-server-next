@@ -69,6 +69,12 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.GET("/ws/app", s.handleWebAppWS, LoginRequired)
 	e.GET("/ws/plugin", s.handlePluginWS, LoginRequired)
 
+	if s.Config.PluginsURL != "" {
+		// e.GET("/plugins/", s.pythonPluginRepoHandler("/qgis-plugins-repo"))
+		e.GET("/plugins/platform/:platform", s.platformPluginRepoHandler("/qgis-plugins-repo"))
+		e.GET("/plugins/download/*", s.handleDownloadPlugin("/qgis-plugins-repo"))
+	}
+
 	// owsHandler := s.owsHandler()
 	// e.GET("/api/map/ows", owsHandler)
 	// e.POST("/api/map/ows", owsHandler)

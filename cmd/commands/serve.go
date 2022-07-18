@@ -68,6 +68,7 @@ func Serve() error {
 			ProjectsRoot   string `conf:"default:/publish"`
 			MapCacheRoot   string
 			MapserverURL   string
+			PluginsURL     string
 			SignupAPI      bool
 			MaxProjectSize ByteSize
 		}
@@ -178,6 +179,7 @@ func Serve() error {
 		MapserverURL:   cfg.Gisquick.MapserverURL,
 		MapCacheRoot:   cfg.Gisquick.MapCacheRoot,
 		ProjectsRoot:   cfg.Gisquick.ProjectsRoot,
+		PluginsURL:     cfg.Gisquick.PluginsURL,
 		SignupAPI:      cfg.Gisquick.SignupAPI,
 		SiteURL:        cfg.Web.SiteURL,
 		MaxProjectSize: int64(cfg.Gisquick.MaxProjectSize),

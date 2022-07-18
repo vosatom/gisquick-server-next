@@ -28,6 +28,7 @@ type Config struct {
 	SecretKey         string
 	SessionExpiration time.Duration
 	SignupAPI         bool
+	PluginsURL        string
 	MaxProjectSize    int64
 }
 
