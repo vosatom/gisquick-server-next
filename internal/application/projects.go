@@ -206,16 +206,18 @@ func (s *projectService) GetLayerPermissions(projectName string, layerId string,
 }
 
 type BaseLayer struct {
-	Name         string                     `json:"name"`
-	Title        string                     `json:"title"`
-	Type         string                     `json:"type"`
-	Projection   string                     `json:"projection"`
-	LegendURL    string                     `json:"legend_url,omitempty"`
-	Metadata     map[string]string          `json:"metadata"`
-	Attribution  map[string]string          `json:"attribution,omitempty"`
-	Extent       []float64                  `json:"extent"`
-	Provider     string                     `json:"provider_type"`
-	SourceParams map[string]json.RawMessage `json:"source"`
+	Name             string                     `json:"name"`
+	Title            string                     `json:"title"`
+	Type             string                     `json:"type"`
+	Projection       string                     `json:"projection"`
+	LegendURL        string                     `json:"legend_url,omitempty"`
+	LegendDisabled   bool                       `json:"legend_disabled,omitempty"`
+	Metadata         map[string]string          `json:"metadata"`
+	Attribution      map[string]string          `json:"attribution,omitempty"`
+	Extent           []float64                  `json:"extent"`
+	Provider         string                     `json:"provider_type"`
+	SourceParams     map[string]json.RawMessage `json:"source"`
+	CustomProperties json.RawMessage            `json:"custom,omitempty"`
 
 	// WMS params, old API
 	URL       string   `json:"url"`
@@ -230,6 +232,7 @@ type OverlayLayer struct {
 	// Extent       []float64               `json:"extent"`
 	Projection           string                  `json:"projection"`
 	LegendURL            string                  `json:"legend_url,omitempty"`
+	LegendDisabled       bool                    `json:"legend_disabled,omitempty"`
 	Metadata             map[string]string       `json:"metadata"`
 	Attribution          map[string]string       `json:"attribution,omitempty"`
 	Attributes           []domain.LayerAttribute `json:"attributes,omitempty"`
@@ -244,6 +247,7 @@ type OverlayLayer struct {
 	AttributeTableFields []string                `json:"attr_table_fields,omitempty"`
 	InfoPanelFields      []string                `json:"info_panel_fields,omitempty"`
 	ExportFields         []string                `json:"export_fields,omitempty"`
+	CustomProperties     json.RawMessage         `json:"custom,omitempty"`
 }
 
 func filterList(list []string, test func(item string) bool) []string {
@@ -375,17 +379,20 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		},
 		func(id string) interface{} {
 			lmeta := meta.Layers[id]
+			lset := settings.Layers[id]
 			ldata := BaseLayer{
-				Name:         lmeta.Name,
-				Title:        lmeta.Title,
-				Type:         lmeta.Type,
-				Projection:   lmeta.Projection,
-				Metadata:     lmeta.Metadata,
-				LegendURL:    lmeta.LegendURL,
-				Attribution:  lmeta.Attribution,
-				Extent:       lmeta.Extent,
-				Provider:     lmeta.Provider,
-				SourceParams: lmeta.SourceParams,
+				Name:             lmeta.Name,
+				Title:            lmeta.Title,
+				Type:             lmeta.Type,
+				Projection:       lmeta.Projection,
+				Metadata:         lmeta.Metadata,
+				LegendURL:        lmeta.LegendURL,
+				Attribution:      lmeta.Attribution,
+				Extent:           lmeta.Extent,
+				Provider:         lmeta.Provider,
+				SourceParams:     lmeta.SourceParams,
+				CustomProperties: lset.CustomProperties,
+				LegendDisabled:   lset.LegendDisabled,
 			}
 			if lmeta.Type == "RasterLayer" && lmeta.Provider == "wms" {
 				ldata.Format = lmeta.SourceParams.String("format")
@@ -415,18 +422,20 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 			queryable := lmeta.Flags.Has("query") && !lset.Flags.Has("hidden") && lflags.Has("query")
 
 			ldata := OverlayLayer{
-				Bands:       lmeta.Bands,
-				Name:        lmeta.Name,
-				Title:       lmeta.Title,
-				Projection:  lmeta.Projection,
-				Type:        lmeta.Type,
-				Metadata:    lmeta.Metadata,
-				Hidden:      lset.Flags.Has("hidden"),
-				Queryable:   queryable,
-				InfoPanel:   lset.InfoPanelComponent,
-				LegendURL:   lmeta.LegendURL,
-				Attribution: lmeta.Attribution,
-				Visible:     lmeta.Visible,
+				Bands:            lmeta.Bands,
+				Name:             lmeta.Name,
+				Title:            lmeta.Title,
+				Projection:       lmeta.Projection,
+				Type:             lmeta.Type,
+				Metadata:         lmeta.Metadata,
+				Hidden:           lset.Flags.Has("hidden"),
+				Queryable:        queryable,
+				InfoPanel:        lset.InfoPanelComponent,
+				LegendURL:        lmeta.LegendURL,
+				Attribution:      lmeta.Attribution,
+				Visible:          lmeta.Visible,
+				CustomProperties: lset.CustomProperties,
+				LegendDisabled:   lset.LegendDisabled,
 			}
 			// if !lset.Flags.Has("render_off") {
 			// 	drawingOrder := indexOf(meta.LayersOrder, id)
@@ -478,8 +487,15 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 					if rolesPerms != nil {
 						attrsPerms := rolesPerms.AttributesFlags(id)
 						isAttributeVisible := func(item string) bool { return attrsPerms[item].Has("view") }
-						ldata.AttributeTableFields = filterList(lset.AttributeTableFields, isAttributeVisible)
-						ldata.InfoPanelFields = filterList(lset.InfoPanelFields, isAttributeVisible)
+
+						// ldata.AttributeTableFields = filterList(lset.AttributeTableFields, isAttributeVisible)
+						// ldata.InfoPanelFields = filterList(lset.InfoPanelFields, isAttributeVisible)
+						// new API
+						if lset.FieldsOrder != nil {
+							ldata.AttributeTableFields = lset.GetTableFields().Filter(isAttributeVisible)
+							ldata.InfoPanelFields = lset.GetInfoPanelFields().Filter(isAttributeVisible)
+						}
+
 						ldata.ExportFields = filterList(lset.ExportFields, func(item string) bool { return attrsPerms[item].Has("export") })
 						ldata.Attributes = make([]domain.LayerAttribute, 0, len(lmeta.Attributes))
 						for _, a := range lmeta.Attributes {
@@ -493,8 +509,13 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 						}
 						// s.log.Infow("ldata.Attributes (perms)", "attrs", ldata.Attributes)
 					} else {
-						ldata.AttributeTableFields = lset.AttributeTableFields
-						ldata.InfoPanelFields = lset.InfoPanelFields
+						// ldata.AttributeTableFields = lset.AttributeTableFields
+						// ldata.InfoPanelFields = lset.InfoPanelFields
+						// new API
+						if lset.FieldsOrder != nil {
+							ldata.AttributeTableFields = lset.GetTableFields()
+							ldata.InfoPanelFields = lset.GetInfoPanelFields()
+						}
 						ldata.ExportFields = lset.ExportFields
 
 						ldata.Attributes = make([]domain.LayerAttribute, len(lmeta.Attributes))

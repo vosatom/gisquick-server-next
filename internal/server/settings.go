@@ -399,11 +399,6 @@ func (s *Server) handleGetProjectInfo(c echo.Context) error {
 }
 
 func (s *Server) handleUpdateProjectMeta() func(echo.Context) error {
-	type Info struct {
-		File        string            `json:"file"`
-		ProjectHash string            `json:"project_hash"`
-		Projection  domain.Projection `json:"projection"`
-	}
 	return func(c echo.Context) error {
 		projectName := c.Get("project").(string)
 		req := c.Request()

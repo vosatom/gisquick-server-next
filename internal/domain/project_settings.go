@@ -1,6 +1,8 @@
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type AttributeSettings struct {
 	Widget    string                 `json:"widget,omitempty"`
@@ -8,13 +10,52 @@ type AttributeSettings struct {
 	Formatter string                 `json:"format,omitempty"`
 }
 
+type FieldsConfig struct {
+	Global    StringArray `json:"global,omitempty"`
+	Infopanel StringArray `json:"infopanel,omitempty"`
+	Table     StringArray `json:"table,omitempty"`
+}
+
 type LayerSettings struct {
-	Flags                Flags                        `json:"flags"`
-	Attributes           map[string]AttributeSettings `json:"attributes"`
-	InfoPanelComponent   string                       `json:"infopanel_component,omitempty"` // or group with other possible settings into generic map[string]interface{}
-	AttributeTableFields []string                     `json:"attr_table_fields,omitempty"`
-	InfoPanelFields      []string                     `json:"info_panel_fields,omitempty"`
-	ExportFields         []string                     `json:"export_fields,omitempty"`
+	Flags              Flags                        `json:"flags"`
+	Attributes         map[string]AttributeSettings `json:"attributes"`
+	InfoPanelComponent string                       `json:"infopanel_component,omitempty"` // or group with other possible settings into generic map[string]interface{}
+	// AttributeTableFields []string                     `json:"attr_table_fields,omitempty"`   // TODO: remove
+	// InfoPanelFields      []string                     `json:"info_panel_fields,omitempty"`   // TODO: remove
+	ExportFields []string `json:"export_fields,omitempty"`
+	// FieldsOrder          json.RawMessage              `json:"fields_order,omitempty"`
+	// ExcludedFields   json.RawMessage `json:"excluded_fields,omitempty"`
+	FieldsOrder      *FieldsConfig   `json:"fields_order,omitempty"`
+	ExcludedFields   *FieldsConfig   `json:"excluded_fields,omitempty"`
+	LegendDisabled   bool            `json:"legend_disabled,omitempty"`
+	CustomProperties json.RawMessage `json:"custom,omitempty"`
+}
+
+// Returns ordered not excluded fields for InfoPanel
+func (ls *LayerSettings) GetInfoPanelFields() StringArray {
+	fields := ls.FieldsOrder.Global
+	if len(fields) == 0 && len(ls.FieldsOrder.Infopanel) > 0 {
+		fields = ls.FieldsOrder.Infopanel
+	}
+	if ls.ExcludedFields != nil {
+		return fields.Filter(func(item string) bool {
+			return !ls.ExcludedFields.Global.Has(item) && !ls.ExcludedFields.Infopanel.Has(item)
+		})
+	}
+	return fields
+}
+
+func (ls *LayerSettings) GetTableFields() StringArray {
+	fields := ls.FieldsOrder.Global
+	if len(fields) == 0 && len(ls.FieldsOrder.Table) > 0 {
+		fields = ls.FieldsOrder.Table
+	}
+	if ls.ExcludedFields != nil {
+		return fields.Filter(func(item string) bool {
+			return !ls.ExcludedFields.Global.Has(item) && !ls.ExcludedFields.Table.Has(item)
+		})
+	}
+	return fields
 }
 
 type Topic struct {

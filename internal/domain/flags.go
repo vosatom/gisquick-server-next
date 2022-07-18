@@ -1,6 +1,7 @@
 package domain
 
 type Flags []string
+type StringArray = Flags
 
 func contains(items []string, value string) bool {
 	for _, i := range items {
@@ -50,4 +51,14 @@ func (f Flags) Clone() Flags {
 		copy[i] = f
 	}
 	return copy
+}
+
+func (f Flags) Filter(test func(item string) bool) []string {
+	res := make([]string, 0)
+	for _, v := range f {
+		if test(v) {
+			res = append(res, v)
+		}
+	}
+	return res
 }
