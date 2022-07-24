@@ -575,6 +575,9 @@ func (s *DiskStorage) CreateFile(projectName, pattern string, r io.Reader, size 
 
 func (s *DiskStorage) SaveFile(project string, finfo domain.ProjectFile, path string) error {
 	absPath := filepath.Join(s.ProjectsRoot, project, path)
+	if err := os.MkdirAll(filepath.Dir(absPath), 0777); err != nil {
+		return err
+	}
 	if err := os.Rename(finfo.Path, absPath); err != nil {
 		return fmt.Errorf("saving project file: %w", err)
 	}
