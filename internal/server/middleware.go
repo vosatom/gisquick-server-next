@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"path/filepath"
 
 	"github.com/gisquick/gisquick-server/internal/application"
@@ -21,6 +23,24 @@ func LoginRequiredMiddlewareWithConfig(a *auth.AuthService) echo.MiddlewareFunc 
 			}
 			if si == nil {
 				return echo.ErrUnauthorized
+			}
+			return next(c)
+		}
+	}
+}
+
+func SuperuserAccessMiddleware(a *auth.AuthService) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			user, err := a.GetUser(c)
+			if err != nil {
+				return fmt.Errorf("SuperuserAccessMiddleware: %w", err)
+			}
+			if user.IsGuest {
+				return echo.ErrUnauthorized
+			}
+			if !user.IsSuperuser {
+				return echo.ErrForbidden
 			}
 			return next(c)
 		}
@@ -53,29 +73,36 @@ func ProjectAccessMiddleware(a *auth.AuthService, ps application.ProjectService)
 			name := c.Param("name")
 			projectName := filepath.Join(username, name)
 
-			settings, err := ps.GetSettings(projectName)
+			pInfo, err := ps.GetProjectInfo(projectName)
 			if err != nil {
-				return fmt.Errorf("[ProjectAccessMiddleware] reading project settings: %w", err)
+				if errors.Is(err, domain.ErrProjectNotExists) {
+					return echo.NewHTTPError(http.StatusBadRequest, "Project does not exists")
+				}
+				return fmt.Errorf("[ProjectAccessMiddleware] reading project info: %w", err)
 			}
 			access := false
-
-			if settings.Auth.Type == "public" {
+			if pInfo.Authentication == "public" {
 				access = true
 			} else {
 				user, err := a.GetUser(c)
 				if err != nil {
-					return fmt.Errorf("[ProjectAccessMiddleware] get user: %w", err)
+					return fmt.Errorf("[ProjectAccessMiddleware] getting user: %w", err)
 				}
-				switch t := settings.Auth.Type; t {
-				case "authenticated":
-					access = user.IsAuthenticated
-				case "private":
-					access = user.Username == username
-				case "users":
-					access = domain.Flags(settings.Auth.Users).Has(user.Username)
+				if user.IsAuthenticated {
+					if pInfo.Authentication == "authenticated" {
+						access = true
+					} else {
+						access = user.Username == username || user.IsSuperuser
+						if !access && pInfo.Authentication == "users" {
+							settings, err := ps.GetSettings(projectName)
+							if err != nil {
+								return fmt.Errorf("[ProjectAccessMiddleware] reading project settings: %w", err)
+							}
+							access = domain.StringArray(settings.Auth.Users).Has(user.Username)
+						}
+					}
 				}
 			}
-
 			c.Set("project", projectName)
 			if !access {
 				return echo.ErrForbidden
