@@ -54,6 +54,15 @@ func (s *Server) handleGetProjects(c echo.Context) error {
 	return c.JSON(http.StatusOK, data)
 }
 
+func (s *Server) handleGetUserProjects(c echo.Context) error {
+	username := c.Param("user")
+	data, err := s.projects.GetUserProjects(username)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, data)
+}
+
 func (s *Server) handleDeleteProject(c echo.Context) error {
 	projectName := c.Get("project").(string)
 	if err := s.projects.Delete(projectName); err != nil {
