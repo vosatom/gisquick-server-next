@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"time"
 )
 
 var (
@@ -135,10 +134,11 @@ func (s ProjectSettings) UserLayerPermissions(u User, layerId string) LayerPermi
 }
 
 type ProjectFile struct {
-	Path  string    `json:"path"`
-	Hash  string    `json:"hash"`
-	Size  int64     `json:"size"`
-	Mtime time.Time `json:"mtime"`
+	Path string `json:"path"`
+	Hash string `json:"hash"`
+	Size int64  `json:"size"`
+	// Mtime time.Time `json:"mtime"`
+	Mtime int64 `json:"mtime"`
 }
 
 func checkUserRole(u User, role ProjectRole) bool {

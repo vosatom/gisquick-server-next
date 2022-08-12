@@ -77,7 +77,7 @@ func (s *Server) handleDeleteProject(c echo.Context) error {
 // ProgressReader export
 type ProgressReader struct {
 	Reader   io.ReadCloser
-	Callback func(int)
+	Callback func(int, int)
 	Step     int
 	Progress int
 	lastVal  int
@@ -86,8 +86,9 @@ type ProgressReader struct {
 func (r *ProgressReader) Read(p []byte) (n int, err error) {
 	n, err = r.Reader.Read(p)
 	r.Progress += n
-	if r.Progress-r.lastVal >= r.Step || err == io.EOF {
-		r.Callback(r.Progress)
+	delta := r.Progress - r.lastVal
+	if delta >= r.Step || err == io.EOF {
+		r.Callback(r.Progress, delta)
 		r.lastVal = r.Progress
 	}
 	return
@@ -97,10 +98,17 @@ func (r *ProgressReader) Close() error {
 	return r.Reader.Close()
 }
 
+func percProgress(size, total int) int {
+	if total == 0 {
+		return 100
+	}
+	return int(100 * (float64(size) / float64(total)))
+}
+
 func (s *Server) handleUpload() func(echo.Context) error {
 	type fileUploadProgress struct {
-		File     string `json:"file"`
-		Progress int    `json:"progress"`
+		Files         map[string]int `json:"files"`
+		TotalProgress int            `json:"total"`
 	}
 	type uploadInfo struct {
 		Files []domain.ProjectFile `json:"files"`
@@ -137,7 +145,14 @@ func (s *Server) handleUpload() func(echo.Context) error {
 			return err
 		}
 
+		totalSize := int64(0)
+		uploadSizeMap := make(map[string]int, len(info.Files))
+		for _, f := range info.Files {
+			uploadSizeMap[f.Path] = int(f.Size)
+			totalSize += f.Size
+		}
 		// Ver. 1
+		uploadedSize := 0
 		uploadProgress := make(map[string]int)
 		lastNotification := time.Now()
 		nextFile := func() (string, io.ReadCloser, error) { // or ReadCloser?
@@ -149,14 +164,16 @@ func (s *Server) handleUpload() func(echo.Context) error {
 			if strings.HasSuffix(part.FileName(), ".gz") && !strings.HasSuffix(part.FormName(), ".gz") {
 				partReader, _ = gzip.NewReader(part)
 			}
-			pr := &ProgressReader{Reader: partReader, Step: 32 * 1024, Callback: func(p int) {
-				uploadProgress[part.FormName()] = p
+			pr := &ProgressReader{Reader: partReader, Step: 32 * 1024, Callback: func(uploaded, last int) {
+				uploadProgress[part.FormName()] = percProgress(uploaded, uploadSizeMap[part.FormName()])
+				uploadedSize += last
 				now := time.Now()
 				if now.Sub(lastNotification).Seconds() > 0.5 {
-					// if appWs := s.appsWs.Get(username); appWs != nil {
-					// 	s.sendJSONMessage(appWs, "UploadProgress", uploadProgress)
-					// }
-					s.sws.AppChannel().Send(user.Username, "UploadProgress", uploadProgress)
+
+					totalProgress := percProgress(uploadedSize, int(totalSize))
+					s.log.Infow("upload progress", "file", part.FormName(), "uploaded", uploaded, "delta", last, "totalUploaded", uploadedSize, "totalSize", totalSize, "totalProgress", totalProgress)
+					s.sws.AppChannel().Send(user.Username, "UploadProgress", fileUploadProgress{uploadProgress, totalProgress})
+
 					lastNotification = now
 					uploadProgress = make(map[string]int)
 				}
@@ -176,7 +193,7 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		if _, err := reader.NextPart(); err != io.EOF {
 			s.log.Warnf("expected end of stream", "project", projectName)
 		}
-		s.sws.AppChannel().Send(user.Username, "UploadProgress", uploadProgress)
+		s.sws.AppChannel().Send(user.Username, "UploadProgress", fileUploadProgress{uploadProgress, 100})
 
 		// Ver. 2
 		/*

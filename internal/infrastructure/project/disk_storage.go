@@ -51,7 +51,7 @@ func (fi *FilesIndex) DeleteDir(dirPath string) {
 	defer fi.Unlock()
 
 	dirPrefix := strings.TrimSuffix(dirPath, string(filepath.Separator)) + string(filepath.Separator)
-	for p, _ := range fi.Index {
+	for p := range fi.Index {
 		if strings.HasPrefix(p, dirPrefix) {
 			delete(fi.Index, p)
 		}
@@ -408,7 +408,8 @@ func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.
 		f := domain.ProjectFile{
 			Path:  path,
 			Size:  info.Size,
-			Mtime: time.Unix(info.Mtime, 0),
+			Mtime: info.Mtime,
+			// Mtime: time.Unix(info.Mtime, 0),
 		}
 		if checksum {
 			cachedInfo, hasCachedInfo := index.Get(path)
@@ -542,7 +543,7 @@ func (s *DiskStorage) CreateFile(projectName, pattern string, r io.Reader, size 
 		err = fmt.Errorf("creating temp file: %w", err)
 		return
 	}
-	s.log.Infow("created temporary file", "path", f.Name())
+	s.log.Debugw("created temporary file", "path", f.Name())
 	defer func() {
 		// Clean up in case we are returning with an error
 		if err != nil {
@@ -566,10 +567,10 @@ func (s *DiskStorage) CreateFile(projectName, pattern string, r io.Reader, size 
 		return
 	}
 	finfo.Size = fStat.Size()
-	finfo.Mtime = fStat.ModTime()
+	finfo.Mtime = fStat.ModTime().Unix()
 	finfo.Path = f.Name()
 	finfo.Hash = fmt.Sprintf("%x", sha.Sum(nil))
-	s.log.Infow("SaveFile", "path", f.Name(), "hash", finfo.Hash)
+	s.log.Debugw("SaveFile", "path", f.Name(), "hash", finfo.Hash)
 	return
 }
 
@@ -587,9 +588,9 @@ func (s *DiskStorage) SaveFile(project string, finfo domain.ProjectFile, path st
 		return nil
 	}
 	if fStat, err := os.Stat(absPath); err == nil {
-		s.log.Infow("mtime check", "orig", finfo.Mtime.Unix(), "after rename", fStat.ModTime().Unix())
+		s.log.Infow("mtime check", "orig", finfo.Mtime, "after rename", fStat.ModTime().Unix())
 	}
-	index.Set(path, FileInfo{Hash: finfo.Hash, Size: finfo.Size, Mtime: finfo.Mtime.Unix()})
+	index.Set(path, FileInfo{Hash: finfo.Hash, Size: finfo.Size, Mtime: finfo.Mtime})
 	// TODO: update project size
 	return nil
 }
@@ -722,7 +723,7 @@ func indexProjectFilesList(index *FilesIndex) []domain.ProjectFile {
 	listIndex := make([]domain.ProjectFile, len(index.Index))
 	i := 0
 	for path, info := range index.Index {
-		listIndex[i] = domain.ProjectFile{Path: path, Hash: info.Hash, Size: info.Size, Mtime: time.Unix(info.Mtime, 0)}
+		listIndex[i] = domain.ProjectFile{Path: path, Hash: info.Hash, Size: info.Size, Mtime: info.Mtime}
 		i += 1
 	}
 	return listIndex
@@ -741,7 +742,7 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 	if len(info.Updates) > 0 && s.MaxProjectSize > 0 && expectedSize > s.MaxProjectSize {
 		return nil, domain.ErrProjectSize
 	}
-	files := info.Updates
+	updateFiles := info.Updates
 
 	// i := 0
 	// for {
@@ -756,15 +757,15 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 	// 		return nil, fmt.Errorf("missing file change metadata: %s", path)
 	// 	}
 
-	if len(files) > 0 && next == nil {
-		return nil, fmt.Errorf("required function for reading uploaded files")
+	if len(updateFiles) > 0 && next == nil {
+		return nil, fmt.Errorf("required function for reading updated files")
 	}
-	for i := 0; i < len(files); i++ {
+	for i := 0; i < len(updateFiles); i++ {
 		path, reader, err := next()
 		if err != nil {
 			return nil, fmt.Errorf("reading upload files stream: %w", err)
 		}
-		declaredInfo := files[i]
+		declaredInfo := updateFiles[i]
 		if declaredInfo.Path != path {
 			return nil, err // TODO: more graceful error handling
 		}
@@ -777,17 +778,32 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 			reader.Close() // or move to saveToFile?
 			return nil, err
 		}
-		// s.log.Infow("saving file", "path", absPath, "hash", calcHash, "hashMatch", declaredInfo.Hash == calcHash)
+		// lmtime := declaredInfo.Mtime
+		lmtime := time.Unix(declaredInfo.Mtime, 0)
+		if err := os.Chtimes(absPath, lmtime, lmtime); err != nil {
+			s.log.Errorw("updating file's modification time", zap.Error(err))
+		}
 		reader.Close()
+
 		fStat, err := os.Stat(absPath)
 		if err != nil {
-			// ???
-			return nil, err
-		}
-		if declaredInfo.Size != fStat.Size() {
+			s.log.Errorw("getting file's stat info", zap.Error(err))
+		} else if declaredInfo.Size != fStat.Size() {
 			return nil, fmt.Errorf("declared file info doesn't match: %s", path)
 		}
-		index.Set(path, FileInfo{Hash: calcHash, Size: declaredInfo.Size, Mtime: fStat.ModTime().Unix()})
+		if declaredInfo.Mtime != fStat.ModTime().Unix() {
+			s.log.Errorw("saving file", "path", absPath, "cunix", declaredInfo.Mtime, "sunix", fStat.ModTime().Unix())
+		}
+		finfo := FileInfo{Hash: calcHash, Size: declaredInfo.Size, Mtime: declaredInfo.Mtime}
+		if declaredInfo.Hash != "" {
+			if strings.HasPrefix(declaredInfo.Hash, "dbhash:") {
+				finfo.Hash = declaredInfo.Hash
+			} else if declaredInfo.Hash != calcHash {
+				return nil, fmt.Errorf("calculated file hash doesn't match: %s", path)
+			}
+		}
+		// s.log.Infow("saving file", "path", absPath, "hash", calcHash, "hashMatch", declaredInfo.Hash == calcHash, "cmtime", declaredInfo.Mtime.Local(), "smtime", fStat.ModTime())
+		index.Set(path, finfo)
 		// i += 1
 	}
 	for _, path := range info.Removes {
