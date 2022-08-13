@@ -31,33 +31,6 @@ type LayerSettings struct {
 	CustomProperties json.RawMessage `json:"custom,omitempty"`
 }
 
-// Returns ordered not excluded fields for InfoPanel
-func (ls *LayerSettings) GetInfoPanelFields() StringArray {
-	fields := ls.FieldsOrder.Global
-	if len(fields) == 0 && len(ls.FieldsOrder.Infopanel) > 0 {
-		fields = ls.FieldsOrder.Infopanel
-	}
-	if ls.ExcludedFields != nil {
-		return fields.Filter(func(item string) bool {
-			return !ls.ExcludedFields.Global.Has(item) && !ls.ExcludedFields.Infopanel.Has(item)
-		})
-	}
-	return fields
-}
-
-func (ls *LayerSettings) GetTableFields() StringArray {
-	fields := ls.FieldsOrder.Global
-	if len(fields) == 0 && len(ls.FieldsOrder.Table) > 0 {
-		fields = ls.FieldsOrder.Table
-	}
-	if ls.ExcludedFields != nil {
-		return fields.Filter(func(item string) bool {
-			return !ls.ExcludedFields.Global.Has(item) && !ls.ExcludedFields.Table.Has(item)
-		})
-	}
-	return fields
-}
-
 type Topic struct {
 	ID       string   `json:"id"`
 	Title    string   `json:"title"`

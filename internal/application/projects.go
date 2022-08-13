@@ -218,6 +218,7 @@ type BaseLayer struct {
 	Provider         string                     `json:"provider_type"`
 	SourceParams     map[string]json.RawMessage `json:"source"`
 	CustomProperties json.RawMessage            `json:"custom,omitempty"`
+	Visible          bool                       `json:"visible"`
 
 	// WMS params, old API
 	URL       string   `json:"url"`
@@ -339,6 +340,49 @@ func TransformLayersTree(tree []domain.TreeNode, accept func(id string) bool, tr
 	return list, nil
 }
 
+// Returns not excluded ordered fields for InfoPanel
+func GetInfoPanelFields(lm domain.LayerMeta, ls domain.LayerSettings) domain.StringArray {
+	var fields domain.StringArray
+	if ls.FieldsOrder != nil {
+		fields = ls.FieldsOrder.Global
+		if len(fields) == 0 && len(ls.FieldsOrder.Infopanel) > 0 {
+			fields = ls.FieldsOrder.Infopanel
+		}
+	} else {
+		fields = make([]string, len(lm.Attributes))
+		for i, a := range lm.Attributes {
+			fields[i] = a.Name
+		}
+	}
+	if ls.ExcludedFields != nil {
+		return fields.Filter(func(item string) bool {
+			return !ls.ExcludedFields.Global.Has(item) && !ls.ExcludedFields.Infopanel.Has(item)
+		})
+	}
+	return fields
+}
+
+func GetTableFields(lm domain.LayerMeta, ls domain.LayerSettings) domain.StringArray {
+	var fields domain.StringArray
+	if ls.FieldsOrder != nil {
+		fields = ls.FieldsOrder.Global
+		if len(fields) == 0 && len(ls.FieldsOrder.Table) > 0 {
+			fields = ls.FieldsOrder.Table
+		}
+	} else {
+		fields = make([]string, len(lm.Attributes))
+		for i, a := range lm.Attributes {
+			fields[i] = a.Name
+		}
+	}
+	if ls.ExcludedFields != nil {
+		return fields.Filter(func(item string) bool {
+			return !ls.ExcludedFields.Global.Has(item) && !ls.ExcludedFields.Table.Has(item)
+		})
+	}
+	return fields
+}
+
 func (s *projectService) GetMapConfig(projectName string, user domain.User) (map[string]interface{}, error) {
 	var meta domain.QgisMeta
 	if err := s.repo.ParseQgisMetadata(projectName, &meta); err != nil {
@@ -391,6 +435,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				Extent:           lmeta.Extent,
 				Provider:         lmeta.Provider,
 				SourceParams:     lmeta.SourceParams,
+				Visible:          lmeta.Visible,
 				CustomProperties: lset.CustomProperties,
 				LegendDisabled:   lset.LegendDisabled,
 			}
@@ -484,19 +529,23 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 					// 	}
 					// }
 
+					if lset.Flags.Has("export") {
+						ldata.ExportFields = lset.ExportFields
+					}
+
 					if rolesPerms != nil {
 						attrsPerms := rolesPerms.AttributesFlags(id)
 						isAttributeVisible := func(item string) bool { return attrsPerms[item].Has("view") }
 
-						// ldata.AttributeTableFields = filterList(lset.AttributeTableFields, isAttributeVisible)
-						// ldata.InfoPanelFields = filterList(lset.InfoPanelFields, isAttributeVisible)
-						// new API
-						if lset.FieldsOrder != nil {
-							ldata.AttributeTableFields = lset.GetTableFields().Filter(isAttributeVisible)
-							ldata.InfoPanelFields = lset.GetInfoPanelFields().Filter(isAttributeVisible)
-						}
+						ldata.AttributeTableFields = GetTableFields(lmeta, lset).Filter(isAttributeVisible)
+						ldata.InfoPanelFields = GetInfoPanelFields(lmeta, lset).Filter(isAttributeVisible)
 
-						ldata.ExportFields = filterList(lset.ExportFields, func(item string) bool { return attrsPerms[item].Has("export") })
+						if len(ldata.ExportFields) > 0 {
+							ldata.ExportFields = filterList(
+								ldata.ExportFields,
+								func(item string) bool { return attrsPerms[item].Has("export") },
+							)
+						}
 						ldata.Attributes = make([]domain.LayerAttribute, 0, len(lmeta.Attributes))
 						for _, a := range lmeta.Attributes {
 							if isAttributeVisible(a.Name) {
@@ -507,22 +556,14 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 								ldata.Attributes = append(ldata.Attributes, attr)
 							}
 						}
-						// s.log.Infow("ldata.Attributes (perms)", "attrs", ldata.Attributes)
 					} else {
-						// ldata.AttributeTableFields = lset.AttributeTableFields
-						// ldata.InfoPanelFields = lset.InfoPanelFields
-						// new API
-						if lset.FieldsOrder != nil {
-							ldata.AttributeTableFields = lset.GetTableFields()
-							ldata.InfoPanelFields = lset.GetInfoPanelFields()
-						}
-						ldata.ExportFields = lset.ExportFields
+						ldata.AttributeTableFields = GetTableFields(lmeta, lset)
+						ldata.InfoPanelFields = GetInfoPanelFields(lmeta, lset)
 
 						ldata.Attributes = make([]domain.LayerAttribute, len(lmeta.Attributes))
 						for i, a := range lmeta.Attributes {
 							ldata.Attributes[i] = MergeAttributeConfig(a, lset.Attributes[a.Name])
 						}
-						// s.log.Infow("ldata.Attributes", "attrs", ldata.Attributes)
 					}
 				}
 			}
