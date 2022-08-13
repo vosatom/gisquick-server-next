@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
@@ -37,7 +38,6 @@ func (s *Server) handleGetProject(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Project not valid")
 	}
 
-	s.log.Infow("GetProject", "info", info)
 	// if !s.checkProjectAccess(info, c) {
 	// 	return echo.ErrForbidden
 	// }
@@ -166,5 +166,54 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 
 		reverseProxy.ServeHTTP(c.Response(), c.Request())
 		return nil
+	}
+}
+
+func (s *Server) handleGetLayerCapabilities() func(c echo.Context) error {
+	director := func(req *http.Request) {}
+	reverseProxy := &httputil.ReverseProxy{Director: director}
+
+	return func(c echo.Context) error {
+		projectName := c.Get("project").(string)
+		// projectName := getProjectName(c)
+		type LayersMetadata struct {
+			Layers map[string]domain.LayerMeta `json:"layers"`
+		}
+		var meta LayersMetadata
+		err := s.projects.GetQgisMetadata(projectName, &meta)
+		if err != nil {
+			if errors.Is(err, domain.ErrProjectNotExists) {
+				s.log.Errorw(err.Error(), "handler", "handleGetProject")
+				s.log.Errorw("handleGetProject", zap.Error(err))
+				return echo.ErrNotFound
+			}
+			return err
+		}
+		layername := c.QueryParam("LAYER")
+		if layername == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "Missing LAYER parameter")
+		}
+		var lmeta domain.LayerMeta
+
+		for _, layer := range meta.Layers {
+			if layer.Name == layername {
+				lmeta = layer
+				sourceURL := lmeta.SourceParams.String("url")
+				req, err := http.NewRequest(http.MethodGet, sourceURL, nil)
+				if err != nil {
+					return fmt.Errorf("handleGetLayerCapabilities error: %w", err)
+				}
+				for k, vv := range c.Request().Header {
+					if strings.HasPrefix(k, "Accept") {
+						for _, v := range vv {
+							req.Header.Add(k, v)
+						}
+					}
+				}
+				reverseProxy.ServeHTTP(c.Response(), req)
+				return nil
+			}
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, "Unknown LAYER name")
 	}
 }

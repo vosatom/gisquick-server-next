@@ -64,6 +64,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	owsHandler := s.handleMapOws()
 	e.GET("/api/map/ows/:user/:name", owsHandler, ProjectAccess)
 	e.POST("/api/map/ows/:user/:name", owsHandler, ProjectAccess)
+	e.GET("/api/map/capabilities/:user/:name", s.handleGetLayerCapabilities(), ProjectAccess)
 
 	e.POST("/api/project/reload/:user/:name", s.handleProjectReload, ProjectAdminAccess)
 
