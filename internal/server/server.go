@@ -72,6 +72,7 @@ func (d JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
 
 func NewServer(log *zap.SugaredLogger, cfg Config, as *auth.AuthService, signUpService *application.AccountsService, projects application.ProjectService, sws *ws.SettingsWS) *Server {
 	e := echo.New()
+	e.HideBanner = true
 
 	p := prometheus.NewPrometheus("api", nil)
 	p.Use(e)

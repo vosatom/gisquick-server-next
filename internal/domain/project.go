@@ -56,7 +56,7 @@ type UserRolesPermissions struct {
 }
 
 func NewUserRolesPermissions(user User, auth Authentication) *UserRolesPermissions {
-	if auth.Roles == nil {
+	if auth.Roles == nil || len(auth.Roles) == 0 {
 		return nil
 	}
 	roles := FilterUserRoles(user, auth.Roles)
@@ -66,9 +66,6 @@ func NewUserRolesPermissions(user User, auth Authentication) *UserRolesPermissio
 }
 
 func (p *UserRolesPermissions) LayerFlags(layerId string) Flags {
-	// if len(p.roles) == 0 {
-	// 	return Flags([]string{})
-	// }
 	flags, exists := p.layers[layerId]
 	if !exists {
 		if len(p.roles) == 0 {
