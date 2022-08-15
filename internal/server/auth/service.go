@@ -198,6 +198,8 @@ func (s *AuthService) LoginUser(c echo.Context, userAccount domain.Account) erro
 func (s *AuthService) LogoutUser(c echo.Context) {
 	http.SetCookie(c.Response(), &http.Cookie{
 		Path:     "/",
+		Domain:   s.domain,
+		SameSite: http.SameSiteLaxMode,
 		Name:     "sessionid",
 		Value:    "",
 		MaxAge:   -1,
