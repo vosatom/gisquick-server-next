@@ -20,7 +20,6 @@ import (
 	"github.com/gisquick/gisquick-server/internal/infrastructure/project"
 	"github.com/gisquick/gisquick-server/internal/infrastructure/security"
 	"github.com/gisquick/gisquick-server/internal/infrastructure/ws"
-	"github.com/gisquick/gisquick-server/internal/mock"
 	"github.com/gisquick/gisquick-server/internal/server"
 	"github.com/gisquick/gisquick-server/internal/server/auth"
 	"github.com/go-redis/redis/v8"
@@ -165,14 +164,16 @@ func Serve() error {
 	})
 	defer rdb.Close()
 
-	// es := &email.EmailService{
-	// 	Host:     cfg.Email.Host,
-	// 	Port:     cfg.Email.Port,
-	// 	SSL:      cfg.Email.SSL,
-	// 	Username: cfg.Email.Username,
-	// 	Password: cfg.Email.Password,
-	// }
-	es := mock.NewDummyEmailService()
+	var es email.EmailService
+	if cfg.Email.Host != "" {
+		es = &email.SmtpEmailService{
+			Host:     cfg.Email.Host,
+			Port:     cfg.Email.Port,
+			SSL:      cfg.Email.SSL,
+			Username: cfg.Email.Username,
+			Password: cfg.Email.Password,
+		}
+	}
 
 	conf := server.Config{
 		Language:       cfg.Gisquick.Language,

@@ -10,13 +10,13 @@ import (
 )
 
 type AccountsEmailSender struct {
-	client    EmailClient
+	client    EmailService
 	sender    string
 	siteURL   string
 	templates map[string]*template.Template
 }
 
-func NewAccountsEmailSender(client EmailClient, sender, siteURL string) *AccountsEmailSender {
+func NewAccountsEmailSender(client EmailService, sender, siteURL string) *AccountsEmailSender {
 	templates := make(map[string]*template.Template, 2)
 	templates["activation_email_html"] = template.Must(template.ParseFiles("./templates/activation_email.html", "./templates/email_base.html"))
 	templates["activation_email_text"] = template.Must(template.ParseFiles("./templates/activation_email.txt", "./templates/email_base.txt"))
@@ -24,6 +24,7 @@ func NewAccountsEmailSender(client EmailClient, sender, siteURL string) *Account
 	templates["password_reset_email_text"] = template.Must(template.ParseFiles("./templates/reset_password_email.txt", "./templates/email_base.txt"))
 	return &AccountsEmailSender{
 		client:    client,
+		sender:    sender,
 		siteURL:   siteURL,
 		templates: templates,
 	}
@@ -31,7 +32,7 @@ func NewAccountsEmailSender(client EmailClient, sender, siteURL string) *Account
 
 func (s *AccountsEmailSender) SendRegistrationEmail(account domain.Account, uid, token string) error {
 	activationUrl, _ := url.Parse(s.siteURL)
-	activationUrl.Path = "/api/accounts/activate"
+	activationUrl.Path = "/accounts/activate"
 	params := activationUrl.Query()
 	params.Set("uid", uid)
 	params.Set("token", token)
@@ -54,7 +55,6 @@ func (s *AccountsEmailSender) SendRegistrationEmail(account domain.Account, uid,
 	email.SetSubject("Gisquick Registration")
 	email.SetBody(mail.TextPlain, textMsg.String())
 	email.AddAlternative(mail.TextHTML, htmlMsg.String())
-
 	if email.Error != nil {
 		return email.Error
 	}
@@ -63,7 +63,7 @@ func (s *AccountsEmailSender) SendRegistrationEmail(account domain.Account, uid,
 
 func (s *AccountsEmailSender) SendPasswordResetEmail(account domain.Account, uid, token string) error {
 	activationUrl, _ := url.Parse(s.siteURL)
-	activationUrl.Path = "/api/accounts/new_password"
+	activationUrl.Path = "/accounts/new-password"
 	params := activationUrl.Query()
 	params.Set("uid", uid)
 	params.Set("token", token)

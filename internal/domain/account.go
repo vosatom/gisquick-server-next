@@ -70,6 +70,16 @@ func (a *Account) IsActive() bool {
 	return a.Active && a.DateJoined != nil
 }
 
+func (a *Account) Activate() error {
+	if a.IsActive() {
+		return ErrAccountActive
+	}
+	now := time.Now()
+	a.DateJoined = &now
+	a.Active = true
+	return nil
+}
+
 func (a *Account) SetPassword(password string) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

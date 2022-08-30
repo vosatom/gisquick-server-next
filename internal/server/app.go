@@ -9,7 +9,8 @@ import (
 )
 
 type App struct {
-	Language string `json:"lang"`
+	Language         string `json:"lang"`
+	PasswordResetUrl string `json:"reset_password_url,omitempty"`
 }
 
 type UserInfo struct {
@@ -42,6 +43,9 @@ func (s *Server) handleAppInit(c echo.Context) error {
 	// userdtoUser()
 	app := App{
 		Language: s.Config.Language,
+	}
+	if s.accountsService.SupportEmails() {
+		app.PasswordResetUrl = "/api/accounts/password_reset"
 	}
 	data := AppPayload{App: app, User: &user}
 	return c.JSON(http.StatusOK, data)

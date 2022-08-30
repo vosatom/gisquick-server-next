@@ -2,6 +2,6 @@ package email
 
 import mail "github.com/xhit/go-simple-mail/v2"
 
-type EmailClient interface {
+type EmailService interface {
 	SendEmail(email *mail.Email) error
 }

@@ -2,12 +2,13 @@ package email
 
 import (
 	"crypto/tls"
+	"fmt"
 	"time"
 
 	mail "github.com/xhit/go-simple-mail/v2"
 )
 
-type EmailService struct {
+type SmtpEmailService struct {
 	Host     string
 	Port     int
 	SSL      bool
@@ -15,7 +16,7 @@ type EmailService struct {
 	Password string
 }
 
-func (s *EmailService) SendEmail(email *mail.Email) error {
+func (s *SmtpEmailService) SendEmail(email *mail.Email) error {
 	smtp := mail.NewSMTPClient()
 	smtp.Host = s.Host
 	smtp.Port = s.Port
@@ -23,25 +24,28 @@ func (s *EmailService) SendEmail(email *mail.Email) error {
 	smtp.Password = s.Password
 	if s.SSL {
 		smtp.Encryption = mail.EncryptionSSLTLS
+		smtp.TLSConfig = &tls.Config{
+			ServerName: s.Host,
+		}
+	} else {
+		smtp.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
 	}
-
 	smtp.KeepAlive = false
 	// Timeout for connect to SMTP Server
 	smtp.ConnectTimeout = 10 * time.Second
 	// Timeout for send the data and wait respond
 	smtp.SendTimeout = 10 * time.Second
-	// Set TLSConfig to provide custom TLS configuration. For example,
-	// to skip TLS verification (useful for testing):
-	smtp.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 
 	client, err := smtp.Connect()
 	if err != nil {
-		return err
+		return fmt.Errorf("smtp connect: %w", err)
 	}
 	defer client.Close()
 	err = email.Send(client)
 	if err != nil {
-		return err
+		return fmt.Errorf("smtp send: %w", err)
 	}
 	return nil
 }

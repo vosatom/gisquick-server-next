@@ -1,5 +1,4 @@
 {{define "email"}}
-
 {{block "greeting" .}}Hi {{ .User.Username }},{{end}}
 
 {{block "content" .}}{{end}}

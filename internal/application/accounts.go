@@ -4,9 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
-	"time"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
 )
@@ -64,7 +62,7 @@ func (s *AccountsService) NewAccount(username, email, firstName, lastName, passw
 	}
 	if err := s.email.SendRegistrationEmail(account, uid, token); err != nil {
 		// TODO: should we delete account, or implement re-sending?
-		return err
+		return fmt.Errorf("sending registration email [%s]: %w", email, err)
 	}
 	return nil
 }
@@ -82,12 +80,9 @@ func (s *AccountsService) Activate(uid, token string) error {
 	if err := s.tokenGen.CheckToken(token, s.signupClaims(account)); err != nil {
 		return ErrInvalidToken
 	}
-	if account.DateJoined != nil || account.Active {
-		return domain.ErrAccountActive
+	if err := account.Activate(); err != nil {
+		return err
 	}
-	now := time.Now()
-	account.DateJoined = &now
-	account.Active = true
 	return s.Repository.Update(account)
 }
 
@@ -100,7 +95,6 @@ func (s *AccountsService) RequestPasswordReset(email string) error {
 		return ErrNotActiveAccount
 	}
 	uid := base64.URLEncoding.EncodeToString([]byte(account.Username))
-	log.Println("claims:", s.passwordResetClaims(account))
 	token, err := s.tokenGen.GenerateToken(s.passwordResetClaims(account))
 	if err != nil {
 		return fmt.Errorf("generating token: %w", err)
@@ -132,4 +126,8 @@ func (s *AccountsService) SetNewPassword(uid, token, newPassword string) error {
 
 func (s *AccountsService) GetActiveAccounts() ([]domain.Account, error) {
 	return s.Repository.GetActiveAccounts()
+}
+
+func (s *AccountsService) SupportEmails() bool {
+	return s.email != nil
 }
