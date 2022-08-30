@@ -192,6 +192,15 @@ func loadUsers(dbConn *sqlx.DB, args conf.Args) error {
 	return nil
 }
 
+func deleteUser(dbConn *sqlx.DB, args conf.Args) error {
+	if len(args) != 1 {
+		return fmt.Errorf("Invalid number of arguments")
+	}
+	username := args.Num(0)
+	accountsRepo := postgres.NewAccountsRepository(dbConn)
+	return accountsRepo.Delete(username)
+}
+
 func AddUser() error {
 	return runUserCommand(addUser)
 }
@@ -206,4 +215,8 @@ func DumpUsers() error {
 
 func LoadUsers() error {
 	return runUserCommand(loadUsers)
+}
+
+func DeleteUser() error {
+	return runUserCommand(deleteUser)
 }

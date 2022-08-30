@@ -14,6 +14,7 @@ func printCommandsList() {
 	fmt.Println("  addsuperuser")
 	fmt.Println("  dumpusers")
 	fmt.Println("  loadusers")
+	fmt.Println("  deleteuser")
 }
 
 func main() {
@@ -27,6 +28,8 @@ func main() {
 	switch cmd {
 	case "adduser":
 		runCommand(commands.AddUser)
+	case "deleteuser":
+		runCommand(commands.DeleteUser)
 	case "addsuperuser":
 		runCommand(commands.AddSuperuser)
 	case "dumpusers":

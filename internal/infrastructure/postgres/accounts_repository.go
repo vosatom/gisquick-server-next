@@ -39,6 +39,11 @@ func (r *AccountsRepository) Create(account domain.Account) error {
 	return nil
 }
 
+func (r *AccountsRepository) Delete(username string) error {
+	_, err := r.db.Exec("DELETE FROM app_user WHERE username=$1", username)
+	return err
+}
+
 func (r *AccountsRepository) find(q string, args ...interface{}) (domain.Account, error) {
 	var user User
 	err := r.db.Get(&user, q, args...)

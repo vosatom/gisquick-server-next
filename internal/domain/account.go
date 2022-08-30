@@ -138,6 +138,7 @@ func NewAccount(username, email, firstName, lastName, password string) (Account,
 type AccountsRepository interface {
 	Create(account Account) error
 	Update(account Account) error
+	Delete(username string) error
 	GetByUsername(username string) (Account, error)
 	GetByEmail(email string) (Account, error)
 	EmailExists(email string) (bool, error)
