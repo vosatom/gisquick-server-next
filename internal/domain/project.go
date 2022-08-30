@@ -8,8 +8,8 @@ import (
 
 var (
 	ErrProjectNotExists     = errors.New("project does not exists")
+	ErrFileNotExists        = errors.New("project file does not exists")
 	ErrProjectAlreadyExists = errors.New("project already exists")
-	ErrProjectSize          = errors.New("project size is over limit")
 )
 
 // Old code, currently used in mapcache package
@@ -130,12 +130,17 @@ func (s ProjectSettings) UserLayerPermissions(u User, layerId string) LayerPermi
 	}
 }
 
+type FileInfo struct {
+	Hash  string `json:"hash"`
+	Size  int64  `json:"size"`
+	Mtime int64  `json:"mtime"`
+}
+
 type ProjectFile struct {
-	Path string `json:"path"`
-	Hash string `json:"hash"`
-	Size int64  `json:"size"`
-	// Mtime time.Time `json:"mtime"`
-	Mtime int64 `json:"mtime"`
+	Path  string `json:"path"`
+	Hash  string `json:"hash"`
+	Size  int64  `json:"size"`
+	Mtime int64  `json:"mtime"`
 }
 
 func checkUserRole(u User, role ProjectRole) bool {
@@ -187,6 +192,8 @@ type ScriptModule struct {
 
 type Scripts map[string]ScriptModule
 
+type FilesReader func() (string, io.ReadCloser, error)
+
 type ProjectsRepository interface {
 	CheckProjectExists(name string) bool
 	Create(name string, qmeta json.RawMessage) (*ProjectInfo, error)
@@ -197,6 +204,8 @@ type ProjectsRepository interface {
 	CreateFile(projectName, pattern string, r io.Reader, size int64) (ProjectFile, error)
 	SaveFile(project string, finfo ProjectFile, path string) error
 
+	GetFileInfo(project, path string) (FileInfo, error)
+	GetFilesInfo(project string, paths ...string) (map[string]FileInfo, error)
 	ListProjectFiles(project string, checksum bool) ([]ProjectFile, error)
 
 	ParseQgisMetadata(projectName string, data interface{}) error
@@ -208,7 +217,7 @@ type ProjectsRepository interface {
 	GetThumbnailPath(projectName string) string
 	SaveThumbnail(projectName string, r io.Reader) error
 
-	UpdateFiles(projectName string, info FilesChanges, next func() (string, io.ReadCloser, error)) ([]ProjectFile, error)
+	UpdateFiles(projectName string, info FilesChanges, next FilesReader) ([]ProjectFile, error)
 	GetScripts(projectName string) (Scripts, error)
 	UpdateScripts(projectName string, scripts Scripts) error
 	Close()

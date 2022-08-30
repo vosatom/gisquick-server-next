@@ -47,6 +47,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 
 	e.GET("/api/project/media/:user/:name/*", s.handleGetMediaFile, ProjectAccess)
 	e.POST("/api/project/media/:user/:name/*", s.handleUploadMediaFile, ProjectAccess)
+	e.DELETE("/api/project/media/:user/:name/*", s.handleDeleteMediaFile, ProjectAccess)
 	e.POST("/api/project/script/:user/:name", s.handleScriptUpload(), ProjectAdminAccess)
 	e.DELETE("/api/project/script/:user/:name", s.handleDeleteScript(), ProjectAdminAccess)
 

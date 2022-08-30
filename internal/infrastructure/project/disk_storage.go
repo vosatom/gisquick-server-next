@@ -24,17 +24,30 @@ import (
 
 type FilesIndex struct {
 	sync.RWMutex
-	Index map[string]FileInfo
+	Index map[string]domain.FileInfo
 }
 
-func (fi *FilesIndex) Get(path string) (FileInfo, bool) {
+func (fi *FilesIndex) Get(path string) (domain.FileInfo, bool) {
 	fi.RLock()
 	defer fi.RUnlock()
 	val, exists := fi.Index[path]
 	return val, exists
 }
 
-func (fi *FilesIndex) Set(path string, info FileInfo) {
+func (fi *FilesIndex) GetFiles(paths ...string) map[string]domain.FileInfo {
+	fi.RLock()
+	defer fi.RUnlock()
+	data := make(map[string]domain.FileInfo, len(paths))
+	for _, path := range paths {
+		val, exists := fi.Index[path]
+		if exists {
+			data[path] = val
+		}
+	}
+	return data
+}
+
+func (fi *FilesIndex) Set(path string, info domain.FileInfo) {
 	fi.Lock()
 	defer fi.Unlock()
 	fi.Index[path] = info
@@ -69,10 +82,9 @@ func (fi *FilesIndex) TotalSize() int64 {
 }
 
 type DiskStorage struct {
-	ProjectsRoot   string
-	MaxProjectSize int64
-	log            *zap.SugaredLogger
-	indexCache     *ttlcache.Cache[string, *FilesIndex]
+	ProjectsRoot string
+	log          *zap.SugaredLogger
+	indexCache   *ttlcache.Cache[string, *FilesIndex]
 }
 
 type Info struct {
@@ -145,7 +157,7 @@ func NewDiskStorage(log *zap.SugaredLogger, projectsRoot string) *DiskStorage {
 				if err != nil {
 					log.Errorw("failed to list project files", "project", project, zap.Error(err))
 					// TODO: return nil or empty index?
-					// var emptyIndex map[string]*FileInfo
+					// var emptyIndex map[string]*domain.FileInfo
 					// emptyIndex := &FilesIndex{Index: emptyIndex}
 					return nil
 				}
@@ -160,7 +172,6 @@ func NewDiskStorage(log *zap.SugaredLogger, projectsRoot string) *DiskStorage {
 					info.Hash = hash
 					files[path] = info
 				}
-				log.Info("new index files", files)
 				indexData = files
 			}
 			index := &FilesIndex{Index: indexData}
@@ -306,8 +317,8 @@ func (s *DiskStorage) GetProjectInfo(name string) (domain.ProjectInfo, error) {
 // 	}
 // }
 
-func (s *DiskStorage) createFilesMap(project string) (map[string]FileInfo, error) {
-	files := make(map[string]FileInfo)
+func (s *DiskStorage) createFilesMap(project string) (map[string]domain.FileInfo, error) {
+	files := make(map[string]domain.FileInfo)
 	root, err := filepath.Abs(filepath.Join(s.ProjectsRoot, project))
 	if err != nil {
 		return nil, err
@@ -323,7 +334,7 @@ func (s *DiskStorage) createFilesMap(project string) (map[string]FileInfo, error
 				if err != nil {
 					return fmt.Errorf("getting file info: %w", err)
 				}
-				files[relPath] = FileInfo{Size: fInfo.Size(), Mtime: fInfo.ModTime().Unix()}
+				files[relPath] = domain.FileInfo{Size: fInfo.Size(), Mtime: fInfo.ModTime().Unix()}
 			}
 		}
 		return nil
@@ -373,7 +384,7 @@ func (s *DiskStorage) ListProjectFiles1(project string, checksum bool) ([]domain
 							return fmt.Errorf("computing checksum: %w", err)
 						}
 						finfo.Hash = hash
-						index.Set(relPath, FileInfo{Hash: finfo.Hash, Size: finfo.Size, Mtime: finfo.Mtime.Unix()})
+						index.Set(relPath, domain.FileInfo{Hash: finfo.Hash, Size: finfo.Size, Mtime: finfo.Mtime.Unix()})
 					}
 				}
 				files = append(files, finfo)
@@ -423,7 +434,7 @@ func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.
 				}
 				f.Hash = hash
 				// update file info in the index
-				index.Set(path, FileInfo{Hash: hash, Size: info.Size, Mtime: info.Mtime})
+				index.Set(path, domain.FileInfo{Hash: hash, Size: info.Size, Mtime: info.Mtime})
 				indexUpdated = true
 				s.log.Debugw("updating files index", "path", path)
 			}
@@ -453,12 +464,61 @@ func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.
 	return files, nil
 }
 
+// func (s *DiskStorage) GetFileInfo(project, path string, checksum bool) (domain.FileInfo, error) {
+// 	absPath, err := filepath.Abs(filepath.Join(s.ProjectsRoot, project, path))
+// 	if err != nil {
+// 		return domain.FileInfo{}, err
+// 	}
+// 	fi, err := os.Stat(absPath)
+// 	if err != nil {
+// 		if errors.Is(err, os.ErrNotExist) {
+// 			return domain.FileInfo{}, domain.ErrFileNotExists
+// 		}
+// 		return domain.FileInfo{}, fmt.Errorf("getting file info: %w", err)
+// 	}
+// 	pfi := domain.FileInfo{Size: fi.Size(), Mtime: fi.ModTime().Unix()}
+// 	if checksum {
+// 		hash, err := Checksum(absPath)
+// 		if err != nil {
+// 			return pfi, fmt.Errorf("getting file checksum: %w", err)
+// 		}
+// 		pfi.Hash = hash
+// 	}
+// 	return pfi, nil
+// }
+
+func (s *DiskStorage) GetFileInfo(project, path string) (domain.FileInfo, error) {
+	index, err := s.filesIndex(project)
+	if err != nil {
+		s.log.Errorw("reading files index", "project", project, zap.Error(err))
+		return domain.FileInfo{}, fmt.Errorf("reading files index [%s]: %w", project, err)
+	}
+	fi, exists := index.Get(path)
+	if !exists {
+		return domain.FileInfo{}, domain.ErrFileNotExists
+	}
+	return fi, nil
+}
+
+func (s *DiskStorage) GetFilesInfo(project string, paths ...string) (map[string]domain.FileInfo, error) {
+	index, err := s.filesIndex(project)
+	if err != nil {
+		s.log.Errorw("reading files index", "project", project, zap.Error(err))
+		// return nil, fmt.Errorf("loading files index: %w", err)
+		return nil, fmt.Errorf("reading files index [%s]: %w", project, err)
+	}
+	data := index.GetFiles(paths...)
+	return data, nil
+}
+
 func (s *DiskStorage) Delete(name string) error {
+	if !s.CheckProjectExists(name) {
+		return domain.ErrProjectNotExists
+	}
 	dest := filepath.Join(s.ProjectsRoot, name)
 	if err := os.RemoveAll(dest); err != nil {
 		return err
 	}
-	// delete Mapcache
 	return nil
 }
 
@@ -515,23 +575,22 @@ func saveToFile2(src io.Reader, filename string) (h string, err error) {
 	return hash, nil
 }
 
-// Currently not used
 func (s *DiskStorage) CreateFile(projectName, pattern string, r io.Reader, size int64) (finfo domain.ProjectFile, err error) {
 	finfo = domain.ProjectFile{}
 	if !s.CheckProjectExists(projectName) {
 		err = domain.ErrProjectNotExists
 		return
 	}
-	index, err := s.filesIndex(projectName)
-	if err != nil {
-		err = fmt.Errorf("reading files index: %w", err)
-		return
-	}
-	projectSize := index.TotalSize()
-	if projectSize+size > s.MaxProjectSize {
-		err = domain.ErrProjectSize
-		return
-	}
+	// index, err := s.filesIndex(projectName)
+	// if err != nil {
+	// 	err = fmt.Errorf("reading files index: %w", err)
+	// 	return
+	// }
+	// projectSize := index.TotalSize()
+	// if projectSize+size > s.MaxProjectSize {
+	// 	err = domain.ErrProjectSize
+	// 	return
+	// }
 	destDir := filepath.Join(s.ProjectsRoot, projectName, ".temp")
 	err = os.MkdirAll(destDir, 0777)
 	if err != nil {
@@ -587,11 +646,15 @@ func (s *DiskStorage) SaveFile(project string, finfo domain.ProjectFile, path st
 		s.log.Errorw("reading files index", "project", project, zap.Error(err))
 		return nil
 	}
-	if fStat, err := os.Stat(absPath); err == nil {
-		s.log.Infow("mtime check", "orig", finfo.Mtime, "after rename", fStat.ModTime().Unix())
+	index.Set(path, domain.FileInfo{Hash: finfo.Hash, Size: finfo.Size, Mtime: finfo.Mtime})
+	pInfo, err := s.GetProjectInfo(project)
+	if err != nil {
+		s.log.Errorw("getting project info", zap.Error(err))
 	}
-	index.Set(path, FileInfo{Hash: finfo.Hash, Size: finfo.Size, Mtime: finfo.Mtime})
-	// TODO: update project size
+	pInfo.Size += finfo.Size
+	if err := s.saveConfigFile(project, "project.json", pInfo); err != nil {
+		s.log.Errorw("updating project file", zap.Error(err))
+	}
 	return nil
 }
 
@@ -645,13 +708,13 @@ func (s *DiskStorage) SaveThumbnail(projectName string, r io.Reader) error {
 // 	return files, nil
 // }
 
-func (s *DiskStorage) loadFilesIndex(projectName string) (map[string]FileInfo, error) {
+func (s *DiskStorage) loadFilesIndex(projectName string) (map[string]domain.FileInfo, error) {
 	s.log.Infow("loading filesIndex", "project", projectName)
-	var index map[string]FileInfo
+	var index map[string]domain.FileInfo
 	indexPath := filepath.Join(s.ProjectsRoot, projectName, ".gisquick", "filesmap.json")
 	f, err := os.Open(indexPath)
 	if err != nil {
-		index = make(map[string]FileInfo)
+		index = make(map[string]domain.FileInfo)
 		if errors.Is(err, os.ErrNotExist) {
 			return index, nil
 		}
@@ -661,7 +724,7 @@ func (s *DiskStorage) loadFilesIndex(projectName string) (map[string]FileInfo, e
 	decoder := json.NewDecoder(f)
 	if err := decoder.Decode(&index); err != nil {
 		// s.log.Errorw("parsing project files index", zap.Error(err))
-		return make(map[string]FileInfo), fmt.Errorf("parsing index file: %w", err)
+		return make(map[string]domain.FileInfo), fmt.Errorf("parsing index file: %w", err)
 	}
 	return index, nil
 }
@@ -670,7 +733,7 @@ func (s *DiskStorage) filesIndex(projectName string) (*FilesIndex, error) {
 	var index *FilesIndex
 	if !s.CheckProjectExists(projectName) {
 		return index, domain.ErrProjectNotExists
-		// return make(map[string]FileInfo), domain.ErrProjectNotExists
+		// return make(map[string]domain.FileInfo), domain.ErrProjectNotExists
 	}
 	fi := s.indexCache.Get(projectName)
 	if fi == nil {
@@ -679,43 +742,13 @@ func (s *DiskStorage) filesIndex(projectName string) (*FilesIndex, error) {
 	return fi.Value(), nil
 }
 
-type FileInfo struct {
-	Hash  string `json:"hash"`
-	Size  int64  `json:"size"`
-	Mtime int64  `json:"mtime"`
-	// Mtime time.Time `json:"mtime"`
-}
-
-// func createFilesIndex(files []domain.ProjectFile) map[string]FileInfo {
-// 	index := make(map[string]FileInfo, len(files))
+// func createFilesIndex(files []domain.ProjectFile) map[string]domain.FileInfo {
+// 	index := make(map[string]domain.FileInfo, len(files))
 // 	for _, f := range files {
-// 		index[f.Path] = FileInfo{Hash: f.Hash, Size: f.Size, Mtime: time.Now().Unix()}
+// 		index[f.Path] = domain.FileInfo{Hash: f.Hash, Size: f.Size, Mtime: time.Now().Unix()}
 // 	}
 // 	return index
 // }
-
-func calcNewSize(index *FilesIndex, info domain.FilesChanges) int64 {
-	index.RLock()
-	// defer index.RUnlock()
-	sizeMap := make(map[string]int64, len(index.Index))
-	for path, f := range index.Index {
-		sizeMap[path] = f.Size
-	}
-	index.RUnlock()
-
-	for _, path := range info.Removes {
-		// TODO: support for deleting of directories?
-		delete(sizeMap, path)
-	}
-	for _, f := range info.Updates {
-		sizeMap[f.Path] = f.Size
-	}
-	var sum int64 = 0
-	for _, size := range sizeMap {
-		sum += size
-	}
-	return sum
-}
 
 func indexProjectFilesList(index *FilesIndex) []domain.ProjectFile {
 	index.RLock()
@@ -729,7 +762,7 @@ func indexProjectFilesList(index *FilesIndex) []domain.ProjectFile {
 	return listIndex
 }
 
-func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, next func() (string, io.ReadCloser, error)) ([]domain.ProjectFile, error) { // ([]domain.ProjectFile, error)
+func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, next domain.FilesReader) ([]domain.ProjectFile, error) {
 	project, err := s.GetProjectInfo(projectName)
 	if err != nil {
 		return nil, err
@@ -737,10 +770,6 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 	index, err := s.filesIndex(projectName)
 	if err != nil {
 		return nil, err
-	}
-	expectedSize := calcNewSize(index, info)
-	if len(info.Updates) > 0 && s.MaxProjectSize > 0 && expectedSize > s.MaxProjectSize {
-		return nil, domain.ErrProjectSize
 	}
 	updateFiles := info.Updates
 
@@ -756,9 +785,10 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 	// 	if i >= len(files) {
 	// 		return nil, fmt.Errorf("missing file change metadata: %s", path)
 	// 	}
-
+	// 	i += 1
+	// }
 	if len(updateFiles) > 0 && next == nil {
-		return nil, fmt.Errorf("required function for reading updated files")
+		return nil, fmt.Errorf("required function for reading files")
 	}
 	for i := 0; i < len(updateFiles); i++ {
 		path, reader, err := next()
@@ -791,10 +821,7 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 		} else if declaredInfo.Size != fStat.Size() {
 			return nil, fmt.Errorf("declared file info doesn't match: %s", path)
 		}
-		if declaredInfo.Mtime != fStat.ModTime().Unix() {
-			s.log.Errorw("saving file", "path", absPath, "cunix", declaredInfo.Mtime, "sunix", fStat.ModTime().Unix())
-		}
-		finfo := FileInfo{Hash: calcHash, Size: declaredInfo.Size, Mtime: declaredInfo.Mtime}
+		finfo := domain.FileInfo{Hash: calcHash, Size: declaredInfo.Size, Mtime: declaredInfo.Mtime}
 		if declaredInfo.Hash != "" {
 			if strings.HasPrefix(declaredInfo.Hash, "dbhash:") {
 				finfo.Hash = declaredInfo.Hash
@@ -804,7 +831,6 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 		}
 		// s.log.Infow("saving file", "path", absPath, "hash", calcHash, "hashMatch", declaredInfo.Hash == calcHash, "cmtime", declaredInfo.Mtime.Local(), "smtime", fStat.ModTime())
 		index.Set(path, finfo)
-		// i += 1
 	}
 	for _, path := range info.Removes {
 		absPath := filepath.Join(s.ProjectsRoot, projectName, path)
@@ -832,50 +858,11 @@ func (s *DiskStorage) UpdateFiles(projectName string, info domain.FilesChanges, 
 		return nil, fmt.Errorf("saving files index: %w", err)
 	}
 	size := index.TotalSize()
-	s.log.Infof("project size: %d / expected: %d", size, expectedSize)
 	project.Size = size
-	if project.State == "empty" {
+	if project.State == "empty" && size > 0 {
 		project.State = "staged"
+		project.LastUpdate = time.Now().UTC()
 	}
-	project.LastUpdate = time.Now().UTC()
-	if err := s.saveConfigFile(projectName, "project.json", project); err != nil {
-		return nil, fmt.Errorf("updating project file: %w", err)
-	}
-	return indexProjectFilesList(index), nil
-}
-
-func (s *DiskStorage) RemoveFiles(projectName string, files ...string) ([]domain.ProjectFile, error) { // ([]domain.ProjectFile, error)
-	project, err := s.GetProjectInfo(projectName)
-	if err != nil {
-		return nil, err
-	}
-	index, err := s.filesIndex(projectName)
-	if err != nil {
-		return nil, err
-	}
-	for _, path := range files {
-		absPath := filepath.Join(s.ProjectsRoot, projectName, path)
-		info, err := os.Lstat(absPath)
-		if err != nil {
-			return nil, fmt.Errorf("removing file/directory %s: %w", path, err)
-		}
-		if info.IsDir() {
-			if err := os.RemoveAll(absPath); err != nil {
-				return nil, fmt.Errorf("removing project directory %s: %w", path, err) // TODO: or allow this kind of error?
-			}
-			index.DeleteDir(path)
-		} else {
-			if err := os.Remove(absPath); err != nil {
-				return nil, fmt.Errorf("removing project file %s: %w", path, err) // TODO: or allow this kind of error?
-			}
-			index.Delete(path)
-		}
-	}
-	if err := saveJsonFile(filepath.Join(s.ProjectsRoot, projectName, ".gisquick", "filesmap.json"), index); err != nil {
-		return nil, fmt.Errorf("saving files index: %w", err)
-	}
-	project.Size = index.TotalSize()
-	project.LastUpdate = time.Now().UTC()
 	if err := s.saveConfigFile(projectName, "project.json", project); err != nil {
 		return nil, fmt.Errorf("updating project file: %w", err)
 	}

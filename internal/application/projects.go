@@ -2,21 +2,29 @@ package application
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"go.uber.org/zap"
 )
 
+var (
+	ErrProjectsCountLimit = errors.New("projects count limit reached")
+	ErrProjectSizeLimit   = errors.New("project size limit reached")
+)
+
 type ProjectService interface {
-	Create(username, name string, meta json.RawMessage) (*domain.ProjectInfo, error)
+	Create(projectName string, meta json.RawMessage) (*domain.ProjectInfo, error)
 	Delete(projectName string) error
 	GetProjectInfo(projectName string) (domain.ProjectInfo, error)
 	GetUserProjects(username string) ([]domain.ProjectInfo, error)
 	// SaveFile(projectName, filename string, r io.Reader) (string, error)
-	SaveFile(projectName, directory, filename string, r io.Reader, size int64) (string, error)
+	SaveFile(projectName, dir, pattern string, r io.Reader, size int64) (string, error)
+	DeleteFile(projectName, path string) error
 	ListProjectFiles(projectName string, checksum bool) ([]domain.ProjectFile, error)
 
 	GetQgisMetadata(projectName string, data interface{}) error
@@ -40,22 +48,40 @@ type ProjectService interface {
 	Close()
 }
 
+type ProjectsLimiter interface {
+	CheckProjectsLimit(projectName string, count int) (bool, error)
+	CheckProjectSizeLimit(projectName string, size int64) (bool, error)
+}
+
 type projectService struct {
-	log  *zap.SugaredLogger
-	repo domain.ProjectsRepository
+	log     *zap.SugaredLogger
+	repo    domain.ProjectsRepository
+	limiter ProjectsLimiter
 	// cache *ttlcache.Cache
 }
 
-func NewProjectsService(log *zap.SugaredLogger, repo domain.ProjectsRepository) *projectService {
+func NewProjectsService(log *zap.SugaredLogger, repo domain.ProjectsRepository, limiter ProjectsLimiter) *projectService {
 	return &projectService{
-		log:  log,
-		repo: repo,
+		log:     log,
+		repo:    repo,
+		limiter: limiter,
 	}
 }
 
-func (s *projectService) Create(username, name string, meta json.RawMessage) (*domain.ProjectInfo, error) {
-	projName := filepath.Join(username, name)
-	return s.repo.Create(projName, meta)
+func (s *projectService) Create(name string, meta json.RawMessage) (*domain.ProjectInfo, error) {
+	username := strings.Split(name, "/")[0]
+	projects, err := s.repo.UserProjects(username)
+	if err != nil {
+		return nil, fmt.Errorf("getting user's projects: %w", err)
+	}
+	canCreate, err := s.limiter.CheckProjectsLimit(username, len(projects)+1)
+	if err != nil {
+		return nil, fmt.Errorf("checking user's projects limit: %w", err)
+	}
+	if !canCreate {
+		return nil, ErrProjectsCountLimit
+	}
+	return s.repo.Create(name, meta)
 }
 
 func (s *projectService) GetProjectInfo(name string) (domain.ProjectInfo, error) {
@@ -63,13 +89,6 @@ func (s *projectService) GetProjectInfo(name string) (domain.ProjectInfo, error)
 }
 
 func (s *projectService) Delete(name string) error {
-	p, err := s.GetProjectInfo(name)
-	if err != nil {
-		return err
-	}
-	if p.Mapcache {
-		// TODO
-	}
 	return s.repo.Delete(name)
 }
 
@@ -95,19 +114,39 @@ func (s *projectService) GetUserProjects(username string) ([]domain.ProjectInfo,
 	return data, nil
 }
 
-func (s *projectService) SaveFile(projectName, directory, filename string, r io.Reader, size int64) (string, error) {
-	finfo, err := s.repo.CreateFile(projectName, "media_", r, size)
+func (s *projectService) SaveFile(projectName, directory, pattern string, r io.Reader, size int64) (string, error) {
+	pi, err := s.GetProjectInfo(projectName)
+	if err != nil {
+		return "", fmt.Errorf("getting project size: %w", err)
+	}
+	canSave, err := s.limiter.CheckProjectSizeLimit(projectName, pi.Size+size)
+	if err != nil {
+		return "", fmt.Errorf("checking project size limit: %w", err)
+	}
+	if !canSave {
+		return "", ErrProjectSizeLimit
+	}
+	finfo, err := s.repo.CreateFile(projectName, pattern, r, size)
 	if err != nil {
 		return "", fmt.Errorf("saving to temp file: %w", err)
 	}
 	s.log.Debugw("saved to temp file", "info", finfo)
 	// filename := strings.TrimSuffix(filepath.Base(finfo.Path), filepath.Ext(finfo.Path))
-	path := filepath.Join(directory, filepath.Base(finfo.Path)+filepath.Ext(filename))
+	path := filepath.Join(directory, filepath.Base(finfo.Path))
 	if err = s.repo.SaveFile(projectName, finfo, path); err != nil {
 		// maybe delete temp file?
 		return "", fmt.Errorf("saving project file: %w", err)
 	}
 	return path, nil
+}
+
+func (s *projectService) DeleteFile(projectName, path string) error {
+	changes := domain.FilesChanges{Removes: []string{path}}
+	_, err := s.UpdateFiles(projectName, changes, nil)
+	if err != nil {
+		return fmt.Errorf("deleting media file: %w", err)
+	}
+	return nil
 }
 
 func (s *projectService) GetQgisMetadata(projectName string, data interface{}) error {
@@ -135,6 +174,67 @@ func (s *projectService) GetThumbnailPath(projectName string) string {
 }
 
 func (s *projectService) UpdateFiles(projectName string, info domain.FilesChanges, next func() (string, io.ReadCloser, error)) ([]domain.ProjectFile, error) {
+	p, err := s.GetProjectInfo(projectName)
+	if err != nil {
+		return nil, err
+	}
+
+	// if len(info.Updates) > 0 && s.MaxProjectSize > 0 && expectedSize > s.MaxProjectSize {
+	// 	return nil, domain.ErrProjectSize
+	// }
+	if len(info.Updates) > 0 {
+		// v1
+		/*
+			size := p.Size
+			for _, p := range info.Removes {
+				fi, err := s.repo.GetFileInfo(projectName, p, false)
+				if err != nil {
+					return nil, fmt.Errorf("calculating project size [%s]: %w", p, err)
+				}
+				size -= fi.Size
+			}
+			for _, i := range info.Updates {
+				fi, err := s.repo.GetFileInfo(projectName, i.Path, false)
+				if err != nil && err != domain.ErrFileNotExists {
+					return nil, fmt.Errorf("calculating project size [%s]: %w", i.Path, err)
+				}
+				if err == nil {
+					size -= fi.Size
+				}
+				size += i.Size
+			}
+		*/
+		// v2
+		size := p.Size
+		files := make([]string, 0, len(info.Updates)+len(info.Removes))
+		files = append(files, info.Removes...)
+		for _, f := range info.Updates {
+			files = append(files, f.Path)
+		}
+		filesInfo, err := s.repo.GetFilesInfo(projectName, files...)
+		for _, p := range info.Removes {
+			fi, ok := filesInfo[p]
+			if ok {
+				size -= fi.Size
+			}
+		}
+		for _, f := range info.Updates {
+			fi, ok := filesInfo[f.Path]
+			if ok {
+				size -= fi.Size
+			}
+			size += f.Size
+		}
+
+		// s.log.Infow("UpdateFiles", "currentSize", p.Size, "expected size", size)
+		updateAllowed, err := s.limiter.CheckProjectSizeLimit(projectName, size)
+		if err != nil {
+			return nil, fmt.Errorf("checking user's project size limit: %w", err)
+		}
+		if !updateAllowed {
+			return nil, ErrProjectSizeLimit
+		}
+	}
 	return s.repo.UpdateFiles(projectName, info, next)
 }
 
@@ -620,7 +720,6 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 
 			visible := !lset.Flags.Has("excluded") && !lset.Flags.Has("hidden")
 			if visible && rolesPerms != nil {
-				// s.log.Infow("topics", "user", user, "layer", lid, "view", rolesPerms.LayerFlags(lid).Has("view"))
 				visible = rolesPerms.LayerFlags(lid).Has("view")
 			}
 			if visible {
@@ -632,8 +731,6 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		}
 	}
 	data["topics"] = topics
-
-	// s.log.Infow("[GetMapConfig]", "layers", meta.Layers)
 	return data, nil
 }
 

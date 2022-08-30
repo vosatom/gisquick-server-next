@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gisquick/gisquick-server/internal/application"
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -27,6 +28,7 @@ import (
 const MB int64 = 1024 * 1024
 
 var MaxJSONSize int64 = 1 * MB
+var MaxScriptSize int64 = 5 * MB
 
 func (s *Server) handleGetProjectFiles() func(echo.Context) error {
 	return func(c echo.Context) error {
@@ -128,7 +130,9 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		if err != nil {
 			return err
 		}
-		req.Body = http.MaxBytesReader(c.Response(), req.Body, s.Config.MaxProjectSize)
+		if s.Config.MaxProjectSize > 0 {
+			req.Body = http.MaxBytesReader(c.Response(), req.Body, s.Config.MaxProjectSize)
+		}
 		reader := multipart.NewReader(req.Body, boundary)
 		projectName := c.Get("project").(string)
 
@@ -183,7 +187,7 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		changes := domain.FilesChanges{Updates: info.Files}
 		if _, err := s.projects.UpdateFiles(projectName, changes, nextFile); err != nil {
 			// better check in future release https://github.com/golang/go/issues/30715
-			if errors.Is(err, domain.ErrProjectSize) || err.Error() == "http: request body too large" {
+			if errors.Is(err, application.ErrProjectSizeLimit) || err.Error() == "http: request body too large" {
 				// s.log.Warn("uploading files: max limit reached")
 				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached project size limit.")
 			}
@@ -337,11 +341,14 @@ func (s *Server) handleCreateProject() func(echo.Context) error {
 		}
 		username := c.Param("user")
 		name := c.Param("name")
-
-		info, err := s.projects.Create(username, name, data)
+		projName := filepath.Join(username, name)
+		info, err := s.projects.Create(projName, data)
 		if err != nil {
 			if errors.Is(err, domain.ErrProjectAlreadyExists) {
 				return echo.NewHTTPError(http.StatusConflict, "Project already exists")
+			}
+			if errors.Is(err, application.ErrProjectsCountLimit) {
+				return echo.NewHTTPError(http.StatusConflict, "Projects limit was reached")
 			}
 			return err
 		}
@@ -496,7 +503,9 @@ func (s *Server) handleScriptUpload() func(echo.Context) error {
 	return func(c echo.Context) error {
 		projectName := c.Get("project").(string)
 
-		if err := c.Request().ParseMultipartForm(2 * MB); err != nil {
+		req := c.Request()
+		req.Body = http.MaxBytesReader(c.Response(), req.Body, MaxJSONSize)
+		if err := req.ParseMultipartForm(2 * MB); err != nil {
 			return err
 		}
 		var info Data
@@ -541,7 +550,7 @@ func (s *Server) handleScriptUpload() func(echo.Context) error {
 			return path, file, nil
 		}
 		if _, err := s.projects.UpdateFiles(projectName, changes, nextFile); err != nil {
-			if errors.Is(err, domain.ErrProjectSize) {
+			if errors.Is(err, application.ErrProjectSizeLimit) {
 				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached project size limit.")
 			}
 			return fmt.Errorf("[handleScriptUpload] saving script file: %w", err)
@@ -659,7 +668,7 @@ func (s *Server) handleProjectReload(c echo.Context) error {
 	}
 	// TODO: hardcoded /publish/ directory!
 	owsProject := filepath.Join("/publish/", projectName, p.QgisFile)
-	params := url.Values{"project": {owsProject}}
+	params := url.Values{"MAP": {owsProject}}
 
 	req, err := http.NewRequest(http.MethodPost, s.Config.MapserverURL, nil)
 	if err != nil {
@@ -682,6 +691,7 @@ func (s *Server) handleProjectReload(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+/*
 func (s *Server) handleMediaFileUpload(c echo.Context) error {
 	projectName := c.Get("project").(string)
 	directory := c.Param("*")
@@ -730,6 +740,7 @@ func (s *Server) handleMediaFileUpload(c echo.Context) error {
 	}
 	return nil
 }
+*/
 
 func (s *Server) handleGetMediaFile(c echo.Context) error {
 	projectName := c.Get("project").(string)
@@ -774,10 +785,23 @@ func (s *Server) handleUploadMediaFile(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("reading upload file: %w", err)
 	}
-	// "*"+filepath.Ext(filename)
-	path, err := s.projects.SaveFile(projectName, directory, file.Filename, src, file.Size)
+
+	pattern := "media_*" + strings.ToLower(filepath.Ext(file.Filename))
+	path, err := s.projects.SaveFile(projectName, directory, pattern, src, file.Size)
 	if err != nil {
+		if errors.Is(err, application.ErrProjectSizeLimit) {
+			return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached project size limit.")
+		}
 		return err
 	}
 	return c.String(http.StatusOK, path)
+}
+
+func (s *Server) handleDeleteMediaFile(c echo.Context) error {
+	projectName := c.Get("project").(string)
+	path := c.Param("*")
+	if !strings.HasPrefix(path, "web/") {
+		return echo.ErrForbidden
+	}
+	return s.projects.DeleteFile(projectName, path)
 }

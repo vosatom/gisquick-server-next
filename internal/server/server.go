@@ -86,12 +86,10 @@ func NewServer(log *zap.SugaredLogger, cfg Config, as *auth.AuthService, signUpS
 		}
 		if code == http.StatusInternalServerError {
 			log.Error(err)
-			// c.Logger().Error(err)
 		}
 	}
 
 	e.Pre(middleware.RemoveTrailingSlash())
-	// e.Use(echoPrometheus.MetricsMiddleware())
 	e.Use(
 		middleware.Recover(),
 		// middleware.Logger(),

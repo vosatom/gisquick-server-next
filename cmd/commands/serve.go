@@ -62,14 +62,15 @@ func (b *ByteSize) UnmarshalText(text []byte) error {
 func Serve() error {
 	cfg := struct {
 		Gisquick struct {
-			Debug          bool   `conf:"default:false"`
-			Language       string `conf:"default:en-us"`
-			ProjectsRoot   string `conf:"default:/publish"`
-			MapCacheRoot   string
-			MapserverURL   string
-			PluginsURL     string
-			SignupAPI      bool
-			MaxProjectSize ByteSize
+			Debug             bool   `conf:"default:false"`
+			Language          string `conf:"default:en-us"`
+			ProjectsRoot      string `conf:"default:/publish"`
+			MapCacheRoot      string
+			MapserverURL      string
+			PluginsURL        string
+			SignupAPI         bool
+			ProjectSizeLimit  ByteSize `conf:"default:-1"`
+			UserProjectsLimit int      `conf:"default:-1"`
 		}
 		Auth struct {
 			SessionExpiration time.Duration `conf:"default:24h"`
@@ -82,7 +83,6 @@ func Serve() error {
 			ShutdownTimeout time.Duration `conf:"default:20s"`
 			SiteURL         string        `conf:"default:http://localhost"`
 			APIHost         string        `conf:"default:0.0.0.0:3000"`
-			// DebugHost       string        `conf:"default:0.0.0.0:4000"`
 		}
 		Postgres struct {
 			User         string `conf:"default:postgres"`
@@ -126,8 +126,6 @@ func Serve() error {
 	log, err := createLogger(logLevel)
 	if err != nil {
 		return fmt.Errorf("failed to create logger: %w", err)
-		// fmt.Printf("failed to create logger: %v", err)
-		// os.Exit(1)
 	}
 
 	out, err := conf.String(&cfg)
@@ -183,7 +181,7 @@ func Serve() error {
 		PluginsURL:     cfg.Gisquick.PluginsURL,
 		SignupAPI:      cfg.Gisquick.SignupAPI,
 		SiteURL:        cfg.Web.SiteURL,
-		MaxProjectSize: int64(cfg.Gisquick.MaxProjectSize),
+		MaxProjectSize: int64(cfg.Gisquick.ProjectSizeLimit),
 	}
 
 	// Services
@@ -200,8 +198,11 @@ func Serve() error {
 	authServ := auth.NewAuthService(log, siteURL.Hostname(), cfg.Auth.SessionExpiration, accountsRepo, sessionStore)
 
 	projectsRepo := project.NewDiskStorage(log, cfg.Gisquick.ProjectsRoot)
-	projectsRepo.MaxProjectSize = int64(cfg.Gisquick.MaxProjectSize)
-	projectsServ := application.NewProjectsService(log, projectsRepo)
+	limiter := &project.SimpleProjectsLimiter{
+		MaxProjectSize:   int64(cfg.Gisquick.ProjectSizeLimit),
+		MaxProjectsCount: cfg.Gisquick.UserProjectsLimit,
+	}
+	projectsServ := application.NewProjectsService(log, projectsRepo, limiter)
 
 	sws := ws.NewSettingsWS(log)
 	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws)

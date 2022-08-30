@@ -102,7 +102,7 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 		// TODO: check project access
 		settings, err := s.projects.GetSettings(projectName)
 		if err != nil {
-			return err
+			return fmt.Errorf("getting project settings: %w", err)
 		}
 		user, err := s.auth.GetUser(c) // todo: load user data only when needed (access control is defined)
 		// perms := settings.UserLayersPermissions(user)
@@ -112,9 +112,8 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 
 			layersData, err := s.projects.GetLayersData(projectName)
 			if err != nil {
-				return err
+				return fmt.Errorf("getting layer data: %w", err)
 			}
-			s.log.Info("layersData", layersData)
 			// p, err := s.projects.GetProject(projectName)
 			// if err != nil {
 			// 	return err
