@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
@@ -149,10 +150,16 @@ func (s *AuthService) GetUser(c echo.Context) (domain.User, error) {
 	return u, nil
 }
 
-func (s *AuthService) Authenticate(username, password string) (domain.Account, error) {
-	account, err := s.accounts.GetByUsername(username)
-	if errors.Is(err, domain.ErrAccountNotFound) {
-		return domain.Account{}, err // TODO: wrap
+func (s *AuthService) Authenticate(login, password string) (domain.Account, error) {
+	var account domain.Account
+	var err error
+	if strings.Contains(login, "@") {
+		account, err = s.accounts.GetByEmail(login)
+	} else {
+		account, err = s.accounts.GetByUsername(login)
+	}
+	if err != nil {
+		return domain.Account{}, err
 	}
 	if !account.Active {
 		return domain.Account{}, ErrUserNotFound
