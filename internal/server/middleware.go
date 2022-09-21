@@ -136,7 +136,7 @@ func SessionMiddlewareWithConfig(store SessionStore) echo.MiddlewareFunc {
 func getSessionId(c echo.Context) string {
 	sessionid := c.Request().Header.Get("Authorization")
 	if sessionid == "" {
-		cookie, err := c.Request().Cookie("sessionid")
+		cookie, err := c.Request().Cookie("gq_session")
 		if err == nil {
 			sessionid = cookie.Value
 		}

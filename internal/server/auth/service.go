@@ -61,14 +61,13 @@ func (s *RedisSessionStore) Get(ctx context.Context, sessionID string) (string, 
 
 type AuthService struct {
 	logger     *zap.SugaredLogger
-	domain     string
 	expiration time.Duration
 	accounts   domain.AccountsRepository
 	store      SessionStore
 	cache      *ttlcache.Cache[string, domain.Account]
 }
 
-func NewAuthService(logger *zap.SugaredLogger, serverDomain string, expiration time.Duration, accounts domain.AccountsRepository, store SessionStore) *AuthService {
+func NewAuthService(logger *zap.SugaredLogger, expiration time.Duration, accounts domain.AccountsRepository, store SessionStore) *AuthService {
 	loader := ttlcache.LoaderFunc[string, domain.Account](
 		func(c *ttlcache.Cache[string, domain.Account], username string) *ttlcache.Item[string, domain.Account] {
 			logger.Infof("ttlcache.LoaderFunc: %s", username)
@@ -88,7 +87,6 @@ func NewAuthService(logger *zap.SugaredLogger, serverDomain string, expiration t
 	)
 	return &AuthService{
 		logger:     logger,
-		domain:     serverDomain,
 		expiration: expiration,
 		accounts:   accounts,
 		store:      store,
@@ -103,7 +101,7 @@ func (s *AuthService) GetSessionInfo(c echo.Context) (*SessionInfo, error) {
 	}
 	sessionid := c.Request().Header.Get("Authorization")
 	if sessionid == "" {
-		cookie, err := c.Request().Cookie("sessionid")
+		cookie, err := c.Request().Cookie("gq_session")
 		if err == nil {
 			sessionid = cookie.Value
 		}
@@ -192,9 +190,8 @@ func (s *AuthService) LoginUser(c echo.Context, userAccount domain.Account) erro
 	// c.Request().URL.Hostname()
 	http.SetCookie(c.Response(), &http.Cookie{
 		Path:     "/",
-		Domain:   s.domain,
 		SameSite: http.SameSiteLaxMode,
-		Name:     "sessionid",
+		Name:     "gq_session",
 		Value:    sessionid,
 		HttpOnly: true,
 		Expires:  time.Now().Add(s.expiration),
@@ -205,9 +202,8 @@ func (s *AuthService) LoginUser(c echo.Context, userAccount domain.Account) erro
 func (s *AuthService) LogoutUser(c echo.Context) {
 	http.SetCookie(c.Response(), &http.Cookie{
 		Path:     "/",
-		Domain:   s.domain,
 		SameSite: http.SameSiteLaxMode,
-		Name:     "sessionid",
+		Name:     "gq_session",
 		Value:    "",
 		MaxAge:   -1,
 		HttpOnly: true,
