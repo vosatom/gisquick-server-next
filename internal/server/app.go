@@ -19,6 +19,7 @@ type UserInfo struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	FullName  string `json:"full_name"`
+	Active    bool   `json:"active`
 }
 
 func dtoUser(u domain.User) UserInfo {
@@ -65,7 +66,7 @@ func (s *Server) handleGetUser(c echo.Context) error {
 }
 
 func (s *Server) handleGetUsers(c echo.Context) error {
-	accounts, err := s.accountsService.GetActiveAccounts()
+	accounts, err := s.accountsService.GetAllAccounts()
 	if err != nil {
 		return err
 	}
@@ -77,6 +78,7 @@ func (s *Server) handleGetUsers(c echo.Context) error {
 			FirstName: u.FirstName,
 			LastName:  u.LastName,
 			FullName:  u.FullName(),
+			Active:    u.Active,
 		})
 	}
 	return c.JSON(http.StatusOK, res)

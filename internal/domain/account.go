@@ -130,6 +130,8 @@ func NewAccount(username, email, firstName, lastName, password string) (Account,
 		if err := account.SetPassword(password); err != nil {
 			return account, err
 		}
+	} else {
+		account.Password = []byte("")
 	}
 	return account, nil
 }
@@ -143,5 +145,6 @@ type AccountsRepository interface {
 	GetByEmail(email string) (Account, error)
 	EmailExists(email string) (bool, error)
 	UsernameExists(username string) (bool, error)
+	GetAllAccounts() ([]Account, error)
 	GetActiveAccounts() ([]Account, error)
 }

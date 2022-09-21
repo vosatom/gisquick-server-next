@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -190,12 +189,8 @@ func Serve() error {
 	emailSender := email.NewAccountsEmailSender(es, cfg.Email.Sender, cfg.Web.SiteURL)
 	accountsService := application.NewAccountsService(emailSender, accountsRepo, tokenGenerator)
 
-	siteURL, err := url.Parse(cfg.Web.SiteURL)
-	if err != nil {
-		return fmt.Errorf("invalid SiteURL value: %s", cfg.Web.SiteURL)
-	}
 	sessionStore := auth.NewRedisStore(rdb)
-	authServ := auth.NewAuthService(log, siteURL.Hostname(), cfg.Auth.SessionExpiration, accountsRepo, sessionStore)
+	authServ := auth.NewAuthService(log, cfg.Auth.SessionExpiration, accountsRepo, sessionStore)
 
 	projectsRepo := project.NewDiskStorage(log, cfg.Gisquick.ProjectsRoot)
 	limiter := &project.SimpleProjectsLimiter{

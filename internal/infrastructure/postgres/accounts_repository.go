@@ -142,6 +142,19 @@ func (r *AccountsRepository) GetActiveAccounts() ([]domain.Account, error) {
 	return accounts, nil
 }
 
+func (r *AccountsRepository) GetAllAccounts() ([]domain.Account, error) {
+	var dbUsers []User
+	err := r.db.Select(&dbUsers, `SELECT * FROM app_user`)
+	if err != nil {
+		return nil, err
+	}
+	accounts := make([]domain.Account, len(dbUsers))
+	for index, user := range dbUsers {
+		accounts[index] = toAccount(user)
+	}
+	return accounts, nil
+}
+
 func toAccount(user User) domain.Account {
 	return domain.Account{
 		Username:    user.Username,
