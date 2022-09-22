@@ -1,0 +1,23 @@
+{{template "email" .}}
+{{define "content"}}
+<p>
+  You was invited to <a class="link" href="{{ .SiteURL }}">Gisquick!</a>
+  To activate your account, please click on the following button and set a new password
+  <a
+    class="md-button raised primary"
+    href="{{ .ActivationLink }}"
+  >
+    Activate account
+  </a>
+</p>
+<p>Portal: {{.PortalUrl}}</p>
+<br />
+<p>If you received this email in error, you can safely ignore this email.</p>
+
+<p>
+  <small>
+    If you can't get the button to work, paste this link into your browser:
+    {{ .ActivationLink }}
+</small>
+</p>
+{{end}}

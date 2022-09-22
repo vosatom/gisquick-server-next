@@ -1,0 +1,10 @@
+{{template "email" .}}
+{{define "content"}}
+You was invited to Gisquick!
+
+To activate your account, please open this link into your browser and set a new password:
+{{ .ActivationLink }}
+
+If you received this email in error, you can safely ignore this email.
+
+{{end}}
