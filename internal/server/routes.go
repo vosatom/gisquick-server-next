@@ -26,7 +26,9 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.POST("/api/accounts/password_reset", s.handlePasswordReset())
 	e.POST("/api/accounts/new_password", s.handleNewPassword())
 	e.POST("/api/accounts/change_password", s.handleChangePassword(), LoginRequired)
-	e.GET("/api/auth/user", s.handleGetUser)
+	e.GET("/api/auth/user", s.handleGetSessionUser)
+	e.GET("/api/auth/is_authenticated", s.handleGetSessionUser, LoginRequired)
+	e.GET("/api/auth/is_superuser", s.handleGetSessionUser, SuperuserRequired)
 
 	// /api/
 	e.GET("/api/app", s.handleAppInit)
