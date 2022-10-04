@@ -22,6 +22,7 @@ import (
 	"github.com/gisquick/gisquick-server/internal/server"
 	"github.com/gisquick/gisquick-server/internal/server/auth"
 	"github.com/go-redis/redis/v8"
+	mail "github.com/xhit/go-simple-mail/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -99,12 +100,14 @@ func Serve() error {
 			DB       int    `conf:"default:0"`
 		}
 		Email struct {
-			Host     string
-			Port     int  `conf:"default:465"`
-			SSL      bool `conf:"default:true"`
-			Username string
-			Password string `conf:"mask"`
-			Sender   string
+			Host                 string
+			Port                 int    `conf:"default:465"`
+			Encryption           string `conf:"default:SSL,help: Options [None|SSL|TLS|SSLTLS|STARTTLS]"`
+			Username             string
+			Password             string `conf:"mask"`
+			Sender               string
+			ActivationSubject    string `conf:"default:Gisquick Registration"`
+			PasswordResetSubject string `conf:"default:Gisquick Password Reset"`
 		}
 	}{}
 
@@ -162,13 +165,24 @@ func Serve() error {
 	defer rdb.Close()
 
 	var es email.EmailService
+	encryptionMap := map[string]mail.Encryption{
+		"None":     mail.EncryptionNone,
+		"SSL":      mail.EncryptionSSL,
+		"TLS":      mail.EncryptionTLS,
+		"SSLTLS":   mail.EncryptionSSLTLS,
+		"STARTTLS": mail.EncryptionSTARTTLS,
+	}
+	encryption, ok := encryptionMap[cfg.Email.Encryption]
+	if !ok {
+		encryption = mail.EncryptionNone
+	}
 	if cfg.Email.Host != "" {
 		es = &email.SmtpEmailService{
-			Host:     cfg.Email.Host,
-			Port:     cfg.Email.Port,
-			SSL:      cfg.Email.SSL,
-			Username: cfg.Email.Username,
-			Password: cfg.Email.Password,
+			Host:       cfg.Email.Host,
+			Port:       cfg.Email.Port,
+			Encryption: encryption,
+			Username:   cfg.Email.Username,
+			Password:   cfg.Email.Password,
 		}
 	}
 
@@ -186,7 +200,13 @@ func Serve() error {
 	// Services
 	accountsRepo := postgres.NewAccountsRepository(dbConn)
 	tokenGenerator := security.NewTokenGenerator(cfg.Auth.SecretKey, "signup", cfg.Auth.SessionExpiration)
-	emailSender := email.NewAccountsEmailSender(es, cfg.Email.Sender, cfg.Web.SiteURL)
+	emailSender := email.NewAccountsEmailSender(
+		es,
+		cfg.Email.Sender,
+		cfg.Web.SiteURL,
+		cfg.Email.ActivationSubject,
+		cfg.Email.PasswordResetSubject,
+	)
 	accountsService := application.NewAccountsService(emailSender, accountsRepo, tokenGenerator)
 
 	sessionStore := auth.NewRedisStore(rdb)

@@ -17,6 +17,7 @@ func (s *EmailService) SendRegistrationEmail(account domain.Account, uid, token 
 	params := activationUrl.Query()
 	params.Set("uid", uid)
 	params.Set("token", token)
+	activationUrl.RawQuery = params.Encode()
 	log.Println("Activation link:", activationUrl.String())
 	return nil
 }

@@ -19,7 +19,7 @@ type UserInfo struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	FullName  string `json:"full_name"`
-	Active    bool   `json:"active`
+	Active    bool   `json:"active"`
 }
 
 func dtoUser(u domain.User) UserInfo {
@@ -56,13 +56,12 @@ type UserData struct {
 	User domain.User `json:"user"`
 }
 
-func (s *Server) handleGetUser(c echo.Context) error {
+func (s *Server) handleGetSessionUser(c echo.Context) error {
 	user, err := s.auth.GetUser(c)
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, UserData{user})
-	// return echo.ErrUnauthorized
 }
 
 func (s *Server) handleGetUsers(c echo.Context) error {
