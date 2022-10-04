@@ -39,7 +39,37 @@ func (s *Server) handleSignUp() func(echo.Context) error {
 			if errors.Is(err, domain.ErrAccountExists) {
 				return echo.NewHTTPError(http.StatusBadRequest, "Account already exists")
 			}
-			// todo handle specific error types
+			s.log.Errorw("creating a new account", zap.Error(err))
+			return err
+		}
+		return c.NoContent(http.StatusOK)
+	}
+}
+
+func (s *Server) handleInvitation() func(echo.Context) error {
+	type InvitationForm struct {
+		Username   string                 `json:"username" form:"username" validate:"required"`
+		Email      string                 `json:"email" form:"email" validate:"required,email"`
+		FirstName  string                 `json:"first_name" form:"first_name"`
+		LastName   string                 `json:"last_name" form:"last_name"`
+		Parameters map[string]interface{} `json:"params"`
+	}
+	var validate = validator.New()
+
+	return func(c echo.Context) error {
+		form := new(InvitationForm)
+		if err := c.Bind(form); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		if err := validate.Struct(form); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		err := s.accountsService.NewAccount(form.Username, form.Email, form.FirstName, form.LastName, "")
+		if err != nil {
+			if errors.Is(err, domain.ErrAccountExists) {
+				return echo.NewHTTPError(http.StatusBadRequest, "Account already exists")
+			}
+			s.log.Errorw("creating a new account", zap.Error(err))
 			return err
 		}
 		return c.NoContent(http.StatusOK)
@@ -53,8 +83,18 @@ func (s *Server) handleActivateAccount() func(echo.Context) error {
 
 		err := s.accountsService.Activate(uid, token)
 		if err != nil {
-			s.log.Errorw("activate account", "uid", uid, zap.Error(err))
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid activation link")
+			if errors.Is(err, application.ErrPasswordNotSet) {
+				// return echo.NewHTTPError(http.StatusNotAcceptable, "Password not set")
+				return echo.NewHTTPError(http.StatusPreconditionFailed, "Password not set")
+			}
+			if errors.Is(err, application.ErrInvalidToken) || errors.Is(err, domain.ErrAccountNotFound) {
+				return echo.NewHTTPError(http.StatusBadRequest, "Invalid activation link")
+			}
+			if errors.Is(err, domain.ErrAccountActive) {
+				return echo.NewHTTPError(http.StatusConflict, "Account already active")
+			}
+			s.log.Errorw("activating account", "uid", uid, zap.Error(err))
+			return echo.NewHTTPError(http.StatusInternalServerError, "Activation error")
 		}
 		return c.NoContent(http.StatusOK)
 	}

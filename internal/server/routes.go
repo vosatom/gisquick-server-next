@@ -19,6 +19,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 
 	if s.Config.SignupAPI {
 		e.POST("/api/accounts/signup", s.handleSignUp())
+		e.POST("/api/accounts/invite", s.handleInvitation(), SuperuserRequired)
 		e.POST("/api/accounts/activate", s.handleActivateAccount())
 		e.GET("/api/accounts/check", s.handleCheckAvailability())
 	}
