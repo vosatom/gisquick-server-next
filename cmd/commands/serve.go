@@ -70,6 +70,7 @@ func Serve() error {
 			PluginsURL        string
 			SignupAPI         bool
 			ProjectSizeLimit  ByteSize `conf:"default:-1"`
+			UserStorageLimit  ByteSize `conf:"default:-1"`
 			UserProjectsLimit int      `conf:"default:-1"`
 		}
 		Auth struct {
@@ -214,8 +215,9 @@ func Serve() error {
 
 	projectsRepo := project.NewDiskStorage(log, cfg.Gisquick.ProjectsRoot)
 	limiter := &project.SimpleProjectsLimiter{
-		MaxProjectSize:   int64(cfg.Gisquick.ProjectSizeLimit),
 		MaxProjectsCount: cfg.Gisquick.UserProjectsLimit,
+		MaxProjectSize:   int64(cfg.Gisquick.ProjectSizeLimit),
+		StorageLimit:     int64(cfg.Gisquick.UserStorageLimit),
 	}
 	projectsServ := application.NewProjectsService(log, projectsRepo, limiter)
 

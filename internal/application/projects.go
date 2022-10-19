@@ -50,7 +50,10 @@ type ProjectService interface {
 
 type ProjectsLimiter interface {
 	CheckProjectsLimit(projectName string, count int) (bool, error)
+	CheckStorageLimit(username string, size int64) (bool, error)
 	CheckProjectSizeLimit(projectName string, size int64) (bool, error)
+	HasProjectSizeLimit(username string) bool
+	HasUserStorageLimit(username string) bool
 }
 
 type projectService struct {
@@ -115,17 +118,47 @@ func (s *projectService) GetUserProjects(username string) ([]domain.ProjectInfo,
 }
 
 func (s *projectService) SaveFile(projectName, directory, pattern string, r io.Reader, size int64) (string, error) {
-	pi, err := s.GetProjectInfo(projectName)
-	if err != nil {
-		return "", fmt.Errorf("getting project size: %w", err)
+	username := strings.Split(projectName, "/")[0]
+	checkProjectSizeLimit := s.limiter.HasProjectSizeLimit(username)
+	checkStorageLimit := s.limiter.HasUserStorageLimit(username)
+
+	var projectsSizes map[string]int64
+	if checkStorageLimit {
+		var err error
+		projectsSizes, err = s.getProjectsSize(username)
+		if err != nil {
+			return "", fmt.Errorf("checking user storage limit: %w", err)
+		}
+		var totalSize int64 = 0
+		for _, pSize := range projectsSizes {
+			totalSize += pSize
+		}
+		canSave, err := s.limiter.CheckStorageLimit(username, totalSize+size)
+		if err != nil {
+			return "", fmt.Errorf("checking user storage limit: %w", err)
+		}
+		if !canSave {
+			return "", ErrProjectSizeLimit
+		}
 	}
-	canSave, err := s.limiter.CheckProjectSizeLimit(projectName, pi.Size+size)
-	if err != nil {
-		return "", fmt.Errorf("checking project size limit: %w", err)
+	if checkProjectSizeLimit {
+		projectSize, ok := projectsSizes[projectName]
+		if !ok {
+			pi, err := s.GetProjectInfo(projectName)
+			if err != nil {
+				return "", fmt.Errorf("getting project size: %w", err)
+			}
+			projectSize = pi.Size
+		}
+		canSave, err := s.limiter.CheckProjectSizeLimit(projectName, projectSize+size)
+		if err != nil {
+			return "", fmt.Errorf("checking project size limit: %w", err)
+		}
+		if !canSave {
+			return "", ErrProjectSizeLimit
+		}
 	}
-	if !canSave {
-		return "", ErrProjectSizeLimit
-	}
+
 	finfo, err := s.repo.CreateFile(projectName, pattern, r, size)
 	if err != nil {
 		return "", fmt.Errorf("saving to temp file: %w", err)
@@ -173,16 +206,31 @@ func (s *projectService) GetThumbnailPath(projectName string) string {
 	return s.repo.GetThumbnailPath(projectName)
 }
 
-func (s *projectService) UpdateFiles(projectName string, info domain.FilesChanges, next func() (string, io.ReadCloser, error)) ([]domain.ProjectFile, error) {
-	p, err := s.GetProjectInfo(projectName)
+func (s *projectService) getProjectsSize(username string) (map[string]int64, error) {
+	projNames, err := s.repo.UserProjects(username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing user projects: %w", err)
 	}
+	data := make(map[string]int64, len(projNames))
+	for _, projName := range projNames {
+		pInfo, err := s.repo.GetProjectInfo(projName)
+		if err != nil {
+			return nil, fmt.Errorf("getting project info: %w", err)
+		}
+		data[projName] = pInfo.Size
+	}
+	return data, nil
+}
 
-	// if len(info.Updates) > 0 && s.MaxProjectSize > 0 && expectedSize > s.MaxProjectSize {
-	// 	return nil, domain.ErrProjectSize
-	// }
-	if len(info.Updates) > 0 {
+func (s *projectService) UpdateFiles(projectName string, info domain.FilesChanges, next func() (string, io.ReadCloser, error)) ([]domain.ProjectFile, error) {
+	username := strings.Split(projectName, "/")[0]
+	checkProjectSizeLimit := s.limiter.HasProjectSizeLimit(username)
+	checkStorageLimit := s.limiter.HasUserStorageLimit(username)
+	if len(info.Updates) > 0 && (checkProjectSizeLimit || checkStorageLimit) {
+		p, err := s.GetProjectInfo(projectName)
+		if err != nil {
+			return nil, err
+		}
 		// v1
 		/*
 			size := p.Size
@@ -229,7 +277,22 @@ func (s *projectService) UpdateFiles(projectName string, info domain.FilesChange
 		// s.log.Infow("UpdateFiles", "currentSize", p.Size, "expected size", size)
 		updateAllowed, err := s.limiter.CheckProjectSizeLimit(projectName, size)
 		if err != nil {
-			return nil, fmt.Errorf("checking user's project size limit: %w", err)
+			return nil, fmt.Errorf("checking user project size limit: %w", err)
+		}
+		if checkStorageLimit {
+			sizes, err := s.getProjectsSize(username)
+			if err != nil {
+				return nil, fmt.Errorf("checking user storage limit: %w", err)
+			}
+			var totalSize int64 = 0
+			for _, pSize := range sizes {
+				totalSize += pSize
+			}
+			totalSize += (-p.Size + size)
+			updateAllowed, err = s.limiter.CheckStorageLimit(username, totalSize)
+			if err != nil {
+				return nil, fmt.Errorf("checking user storage limit: %w", err)
+			}
 		}
 		if !updateAllowed {
 			return nil, ErrProjectSizeLimit
