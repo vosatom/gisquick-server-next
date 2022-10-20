@@ -119,9 +119,10 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 				doc = strings.ReplaceAll(doc, match, replaced[match])
 			}
 		}
-		resp.Body = ioutil.NopCloser(bytes.NewReader([]byte(doc)))
-		resp.ContentLength = int64(len(body))
-		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+		newBody := []byte(doc)
+		resp.Body = ioutil.NopCloser(bytes.NewReader(newBody))
+		resp.ContentLength = int64(len(newBody))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(newBody)))
 		return nil
 	}
 	reverseProxy := &httputil.ReverseProxy{Director: director}
