@@ -5,11 +5,14 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
@@ -82,8 +85,49 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 			// explicitly disable User-Agent so it's not set to default value
 			req.Header.Set("User-Agent", "")
 		}
+		req.Header.Del("Cookie")
+	}
+	rewriteGetCapabilities := func(resp *http.Response) (err error) {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		// original url is still in xsi:schemaLocation
+		// regexp.MustCompile(`xsi:schemaLocation="(.)+"`)
+
+		// reg := regexp.MustCompile(`xlink:href="http://localhost[^"]+"`)
+		reg := regexp.MustCompile(`xlink:href="http://[^"]+MAP=[^"]+"`)
+
+		owsPath := resp.Request.Header.Get("X-Ows-Url")
+		doc := string(body)
+		replaced := make(map[string]string, 2)
+		for _, match := range reg.FindAllString(doc, -1) {
+			_, done := replaced[match]
+			if !done {
+				u := strings.TrimPrefix(match, `xlink:href="`)
+				u = strings.TrimSuffix(u, `"`)
+				parsed, _ := url.Parse(html.UnescapeString(u))
+				params := parsed.Query()
+				params.Del("MAP")
+				parsed.Path = owsPath
+				parsed.RawQuery = params.Encode()
+				replaced[match] = fmt.Sprintf(`xlink:href="%s"`, html.EscapeString(parsed.String()))
+				doc = strings.ReplaceAll(doc, match, replaced[match])
+			}
+		}
+		resp.Body = ioutil.NopCloser(bytes.NewReader([]byte(doc)))
+		resp.ContentLength = int64(len(body))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+		return nil
 	}
 	reverseProxy := &httputil.ReverseProxy{Director: director}
+	capabilitiesProxy := &httputil.ReverseProxy{Director: director}
+	capabilitiesProxy.ModifyResponse = rewriteGetCapabilities
+
 	return func(c echo.Context) error {
 		params := new(OwsRequestParams)
 		if err := (&echo.DefaultBinder{}).BindQueryParams(c, params); err != nil {
@@ -99,11 +143,24 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 			s.log.Errorw("ows handler", zap.Error(err))
 			return err
 		}
-		// TODO: check project access
 		settings, err := s.projects.GetSettings(projectName)
 		if err != nil {
 			return fmt.Errorf("getting project settings: %w", err)
 		}
+
+		req := c.Request()
+		// Set MAP parameter
+		owsProject := filepath.Join("/publish", projectName, pInfo.QgisFile)
+		query := req.URL.Query()
+		query.Set("MAP", owsProject)
+		req.URL.RawQuery = query.Encode()
+
+		if params.Service == "WMS" && strings.EqualFold(params.Request, "GetCapabilities") {
+			req.Header.Set("X-Ows-Url", req.URL.Path)
+			capabilitiesProxy.ServeHTTP(c.Response(), req)
+			return nil
+		}
+
 		user, err := s.auth.GetUser(c) // todo: load user data only when needed (access control is defined)
 		// perms := settings.UserLayersPermissions(user)
 		perms := make(map[string]domain.LayerPermission)
@@ -133,8 +190,8 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 
 			var wfsTransaction Transaction
 			// read all bytes from content body and create new stream using it.
-			bodyBytes, _ := ioutil.ReadAll(c.Request().Body)
-			c.Request().Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+			bodyBytes, _ := ioutil.ReadAll(req.Body)
+			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 			if err := xml.Unmarshal(bodyBytes, &wfsTransaction); err != nil {
 				return err
 			}
@@ -157,13 +214,7 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 			}
 		}
 
-		owsProject := filepath.Join("/publish", projectName, pInfo.QgisFile)
-		s.log.Infow("GetMap", "ows_project", owsProject)
-		query := c.Request().URL.Query()
-		query.Set("MAP", owsProject)
-		c.Request().URL.RawQuery = query.Encode()
-
-		reverseProxy.ServeHTTP(c.Response(), c.Request())
+		reverseProxy.ServeHTTP(c.Response(), req)
 		return nil
 	}
 }
