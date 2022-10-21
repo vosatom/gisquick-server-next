@@ -92,7 +92,7 @@ func Serve() error {
 			Name         string `conf:"default:postgres,env:POSTGRES_DB"`
 			MaxIdleConns int    `conf:"default:3"`
 			MaxOpenConns int    `conf:"default:3"`
-			DisableTLS   bool   `conf:"default:true"`
+			SSLMode      string `conf:"default:prefer"`
 		}
 		Redis struct {
 			Addr     string `conf:"default:redis:6379"` // "/var/run/redis/redis.sock"
@@ -146,7 +146,7 @@ func Serve() error {
 		Name:         cfg.Postgres.Name,
 		MaxIdleConns: cfg.Postgres.MaxIdleConns,
 		MaxOpenConns: cfg.Postgres.MaxOpenConns,
-		DisableTLS:   cfg.Postgres.DisableTLS,
+		SSLMode:      cfg.Postgres.SSLMode,
 	})
 	if err != nil {
 		return fmt.Errorf("connecting to db: %w", err)

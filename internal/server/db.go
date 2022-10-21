@@ -17,17 +17,12 @@ type DBConfig struct {
 	Name         string
 	MaxIdleConns int
 	MaxOpenConns int
-	DisableTLS   bool
+	SSLMode      string
 }
 
 func OpenDB(cfg DBConfig) (*sqlx.DB, error) {
-	sslMode := "require"
-	if cfg.DisableTLS {
-		sslMode = "disable"
-	}
-
 	q := make(url.Values)
-	q.Set("sslmode", sslMode)
+	q.Set("sslmode", cfg.SSLMode)
 	q.Set("timezone", "utc")
 
 	u := url.URL{

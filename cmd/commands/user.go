@@ -38,11 +38,11 @@ type Account struct {
 func runUserCommand(command func(dbConn *sqlx.DB, args conf.Args) error) error {
 	cfg := struct {
 		Postgres struct {
-			User       string `conf:"default:postgres"`
-			Password   string `conf:"default:postgres,mask"`
-			Host       string `conf:"default:postgres"`
-			Name       string `conf:"default:postgres,env:POSTGRES_DB"`
-			DisableTLS bool   `conf:"default:true"`
+			User     string `conf:"default:postgres"`
+			Password string `conf:"default:postgres,mask"`
+			Host     string `conf:"default:postgres"`
+			Name     string `conf:"default:postgres,env:POSTGRES_DB"`
+			SSLMode  string `conf:"default:prefer"`
 		}
 		Args conf.Args
 	}{}
@@ -63,7 +63,7 @@ func runUserCommand(command func(dbConn *sqlx.DB, args conf.Args) error) error {
 		Name:         cfg.Postgres.Name,
 		MaxIdleConns: 1,
 		MaxOpenConns: 1,
-		DisableTLS:   cfg.Postgres.DisableTLS,
+		SSLMode:      cfg.Postgres.SSLMode,
 	})
 	if err != nil {
 		return fmt.Errorf("connecting to db: %w", err)
