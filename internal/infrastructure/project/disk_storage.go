@@ -325,6 +325,10 @@ func (s *DiskStorage) createFilesMap(project string) (map[string]domain.FileInfo
 	}
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// skip files which already not exists
+				return nil
+			}
 			return err
 		}
 		if !entry.IsDir() {
