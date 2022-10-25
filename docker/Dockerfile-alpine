@@ -43,9 +43,10 @@ COPY --from=dbhash-build /usr/local/bin/dbhash /usr/local/bin/
 
 WORKDIR /app
 COPY --from=build /go/src/app/templates ./templates
+COPY --from=build /go/src/app/migrations ./migrations
 COPY --from=build /go/bin/gisquick /usr/local/bin/
 
 USER ${USERNAME}
 EXPOSE 3000
-# ENTRYPOINT ["gisquick"]
+
 CMD ["gisquick", "serve"]

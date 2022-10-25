@@ -15,6 +15,7 @@ func printCommandsList() {
 	fmt.Println("  dumpusers")
 	fmt.Println("  loadusers")
 	fmt.Println("  deleteuser")
+	fmt.Println("  migrate")
 }
 
 func main() {
@@ -38,6 +39,8 @@ func main() {
 		runCommand(commands.LoadUsers)
 	case "serve":
 		runCommand(commands.Serve)
+	case "migrate":
+		runCommand(commands.Migrate)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printCommandsList()
