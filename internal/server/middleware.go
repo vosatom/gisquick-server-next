@@ -22,6 +22,7 @@ func LoginRequiredMiddlewareWithConfig(a *auth.AuthService) echo.MiddlewareFunc 
 				return fmt.Errorf("login required middleware: %w", err)
 			}
 			if si == nil {
+				// add support to basic auth here? (with a.GetUser())
 				return echo.ErrUnauthorized
 			}
 			return next(c)
@@ -105,7 +106,8 @@ func ProjectAccessMiddleware(a *auth.AuthService, ps application.ProjectService)
 			}
 			c.Set("project", projectName)
 			if !access {
-				return echo.ErrForbidden
+				c.Response().Header().Set(echo.HeaderWWWAuthenticate, "basic realm=Restricted")
+				return echo.ErrUnauthorized
 			}
 			return next(c)
 		}

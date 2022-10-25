@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -21,6 +22,10 @@ var (
 	ErrUserNotFound    = errors.New("User not found")
 	ErrInvalidPassword = errors.New("Password doesn't match")
 	ErrInvalidSession  = errors.New("Invalid session")
+)
+
+const (
+	basic = "basic"
 )
 
 type SessionInfo struct {
@@ -60,17 +65,17 @@ func (s *RedisSessionStore) Get(ctx context.Context, sessionID string) (string, 
 }
 
 type AuthService struct {
-	logger     *zap.SugaredLogger
-	expiration time.Duration
-	accounts   domain.AccountsRepository
-	store      SessionStore
-	cache      *ttlcache.Cache[string, domain.Account]
+	logger         *zap.SugaredLogger
+	expiration     time.Duration
+	accounts       domain.AccountsRepository
+	store          SessionStore
+	cache          *ttlcache.Cache[string, domain.Account]
+	basicAuthCache *ttlcache.Cache[string, domain.Account]
 }
 
 func NewAuthService(logger *zap.SugaredLogger, expiration time.Duration, accounts domain.AccountsRepository, store SessionStore) *AuthService {
 	loader := ttlcache.LoaderFunc[string, domain.Account](
 		func(c *ttlcache.Cache[string, domain.Account], username string) *ttlcache.Item[string, domain.Account] {
-			logger.Infof("ttlcache.LoaderFunc: %s", username)
 			account, err := accounts.GetByUsername(username)
 			if err != nil {
 				logger.Errorw("getting account", "username", username, zap.Error(err))
@@ -85,12 +90,18 @@ func NewAuthService(logger *zap.SugaredLogger, expiration time.Duration, account
 		ttlcache.WithLoader[string, domain.Account](loader),
 		ttlcache.WithDisableTouchOnHit[string, domain.Account](),
 	)
+
+	basicAuthCache := ttlcache.New(
+		ttlcache.WithTTL[string, domain.Account](45*time.Second),
+		ttlcache.WithDisableTouchOnHit[string, domain.Account](),
+	)
 	return &AuthService{
-		logger:     logger,
-		expiration: expiration,
-		accounts:   accounts,
-		store:      store,
-		cache:      cache,
+		logger:         logger,
+		expiration:     expiration,
+		accounts:       accounts,
+		store:          store,
+		cache:          cache,
+		basicAuthCache: basicAuthCache,
 	}
 }
 
@@ -99,12 +110,10 @@ func (s *AuthService) GetSessionInfo(c echo.Context) (*SessionInfo, error) {
 	if saved {
 		return &si, nil
 	}
-	sessionid := c.Request().Header.Get("Authorization")
-	if sessionid == "" {
-		cookie, err := c.Request().Cookie("gq_session")
-		if err == nil {
-			sessionid = cookie.Value
-		}
+	sessionid := ""
+	cookie, err := c.Request().Cookie("gq_session")
+	if err == nil {
+		sessionid = cookie.Value
 	}
 	if sessionid == "" {
 		c.Set("session", nil)
@@ -129,21 +138,48 @@ func (s *AuthService) GetUser(c echo.Context) (domain.User, error) {
 	if saved {
 		return u, nil
 	}
-	session, err := s.GetSessionInfo(c)
-	if err != nil {
-		return domain.User{}, err
+	auth := c.Request().Header.Get("Authorization")
+	if auth != "" {
+
+		if item := s.basicAuthCache.Get(auth); item != nil {
+			u = AccountToUser(item.Value())
+			log.Println("basic auth from cache", auth)
+		} else {
+			log.Println("decoding auth header", auth)
+			prefixLen := len(basic)
+			if len(auth) > prefixLen+1 && strings.EqualFold(auth[:prefixLen], basic) {
+				b, err := base64.StdEncoding.DecodeString(auth[prefixLen+1:])
+				if err != nil {
+					return domain.User{IsGuest: true}, err
+				}
+				cred := strings.SplitN(string(b), ":", 2)
+				if len(cred) == 2 {
+					account, err := s.Authenticate(cred[0], cred[1])
+					if err != nil {
+						return domain.User{IsGuest: true}, err
+					}
+					u = AccountToUser(account)
+					s.basicAuthCache.Set(auth, account, ttlcache.DefaultTTL)
+				}
+			}
+		}
+	} else {
+		session, err := s.GetSessionInfo(c)
+		if err != nil {
+			return domain.User{IsGuest: true}, err
+		}
+		if session == nil {
+			return domain.User{IsGuest: true}, nil
+		}
+		if err != nil {
+			return domain.User{IsGuest: true}, fmt.Errorf("auth: get session user: %w", err)
+		}
+		item := s.cache.Get(session.Username)
+		if item == nil {
+			return domain.User{IsGuest: true}, nil
+		}
+		u = AccountToUser(item.Value())
 	}
-	if session == nil {
-		return domain.User{IsGuest: true}, nil
-	}
-	if err != nil {
-		return domain.User{}, fmt.Errorf("auth: get session user: %w", err)
-	}
-	item := s.cache.Get(session.Username)
-	if item == nil {
-		return domain.User{IsGuest: true}, nil
-	}
-	u = AccountToUser(item.Value())
 	c.Set("user", u)
 	return u, nil
 }
@@ -216,7 +252,7 @@ func AccountToUser(account domain.Account) domain.User {
 		Email:           account.Email,
 		FirstName:       account.FirstName,
 		LastName:        account.LastName,
-		IsSuperuser:     account.IsSuperuser,
+		IsSuperuser:     account.Superuser,
 		IsGuest:         false,
 		IsAuthenticated: true,
 	}
