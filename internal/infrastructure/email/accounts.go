@@ -32,8 +32,8 @@ func parseEmailTemplate(name string) EmailTemplate {
 	}
 	htmlFuncs := htmltemplate.FuncMap(funcs)
 	textFuncs := texttemplate.FuncMap(funcs)
-	html := htmltemplate.Must(htmltemplate.New("email").Funcs(htmlFuncs).ParseFiles(fmt.Sprintf("%s.html", name), "./templates/email_base.html"))
-	text := texttemplate.Must(texttemplate.New("email").Funcs(textFuncs).ParseFiles(fmt.Sprintf("%s.txt", name), "./templates/email_base.txt"))
+	html := htmltemplate.Must(htmltemplate.New("email").Funcs(htmlFuncs).ParseFiles("./templates/email_base.html", fmt.Sprintf("%s.html", name)))
+	text := texttemplate.Must(texttemplate.New("email").Funcs(textFuncs).ParseFiles("./templates/email_base.txt", fmt.Sprintf("%s.txt", name)))
 	return EmailTemplate{HTML: html, Text: text}
 }
 

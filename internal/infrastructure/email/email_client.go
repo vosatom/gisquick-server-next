@@ -93,9 +93,9 @@ func (s *SmtpEmailService) SendMultiple(next func() (*mail.Email, error)) error 
 	for err != EndOfQue {
 		if err != nil {
 			if email != nil {
-				errs = append(errs, EmailError{Err: err})
-			} else {
 				errs = append(errs, newEmailError(email, err))
+			} else {
+				errs = append(errs, EmailError{Err: err})
 			}
 		} else {
 			if err := email.Send(client); err != nil {

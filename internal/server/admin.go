@@ -184,10 +184,10 @@ func (s *Server) handleGetEmailPreview() func(echo.Context) error {
 		}
 		if params.TextTemplate != "" {
 			t := texttemplate.New("preview")
-			t.Parse(params.TextTemplate)
 			if strings.HasPrefix(params.TextTemplate, `{{template "email" .}}`) {
 				t.ParseFiles("./templates/email_base.txt")
 			}
+			t.Parse(params.TextTemplate)
 			if err := t.Execute(&buffer, data); err != nil {
 				return fmt.Errorf("processing text template: %w", err)
 			}
@@ -198,10 +198,10 @@ func (s *Server) handleGetEmailPreview() func(echo.Context) error {
 			t := htmltemplate.New("preview")
 			buffer.Reset()
 			data["Style"] = htmltemplate.CSS(params.Style)
-			t.Parse(params.HtmlTemplate)
 			if strings.HasPrefix(params.HtmlTemplate, `{{template "email" .}}`) {
 				t.ParseFiles("./templates/email_base.html")
 			}
+			t.Parse(params.HtmlTemplate)
 			// if err := t.ExecuteTemplate(&buffer, "email", data); err != nil {
 			if err := t.Execute(&buffer, data); err != nil {
 				return fmt.Errorf("processing html template: %w", err)
@@ -241,17 +241,17 @@ func (s *Server) handleSendEmail() func(echo.Context) error {
 		var textTemplate *texttemplate.Template
 		if params.TextTemplate != "" {
 			textTemplate = texttemplate.New("new_text_email")
-			textTemplate.Parse(params.TextTemplate)
 			if strings.HasPrefix(params.TextTemplate, `{{template "email" .}}`) {
 				textTemplate.ParseFiles("./templates/email_base.txt")
 			}
+			textTemplate.Parse(params.TextTemplate)
 		}
 		if params.HtmlTemplate != "" {
 			htmlTemplate = htmltemplate.New("new_html_email")
-			htmlTemplate.Parse(params.HtmlTemplate)
 			if strings.HasPrefix(params.HtmlTemplate, `{{template "email" .}}`) {
 				htmlTemplate.ParseFiles("./templates/email_base.html")
 			}
+			htmlTemplate.Parse(params.HtmlTemplate)
 		}
 
 		var accounts []domain.Account
