@@ -100,7 +100,7 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 		// regexp.MustCompile(`xsi:schemaLocation="(.)+"`)
 
 		// reg := regexp.MustCompile(`xlink:href="http://localhost[^"]+"`)
-		reg := regexp.MustCompile(`xlink:href="http://[^"]+MAP=[^"]+"`)
+		reg := regexp.MustCompile(`xlink:href="http[s]?://[^"]+MAP=[^"]+"`)
 
 		owsPath := resp.Request.Header.Get("X-Ows-Url")
 		doc := string(body)
