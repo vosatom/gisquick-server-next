@@ -21,6 +21,7 @@ import (
 type Config struct {
 	Debug             bool
 	Language          string
+	LandingProject    string
 	MapserverURL      string
 	MapCacheRoot      string
 	ProjectsRoot      string

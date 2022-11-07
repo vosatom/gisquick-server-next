@@ -10,6 +10,7 @@ import (
 
 type App struct {
 	Language         string `json:"lang"`
+	LandingProject   string `json:"landing_project,omitempty"`
 	PasswordResetUrl string `json:"reset_password_url,omitempty"`
 }
 
@@ -43,7 +44,8 @@ func (s *Server) handleAppInit(c echo.Context) error {
 	}
 	// userdtoUser()
 	app := App{
-		Language: s.Config.Language,
+		Language:       s.Config.Language,
+		LandingProject: s.Config.LandingProject,
 	}
 	if s.accountsService.SupportEmails() {
 		app.PasswordResetUrl = "/api/accounts/password_reset"

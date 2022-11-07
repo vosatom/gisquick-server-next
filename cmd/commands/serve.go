@@ -72,6 +72,7 @@ func Serve() error {
 			ProjectSizeLimit  ByteSize `conf:"default:-1"`
 			UserStorageLimit  ByteSize `conf:"default:-1"`
 			UserProjectsLimit int      `conf:"default:-1"`
+			LandingProject    string
 		}
 		Auth struct {
 			SessionExpiration time.Duration `conf:"default:24h"`
@@ -189,6 +190,7 @@ func Serve() error {
 
 	conf := server.Config{
 		Language:       cfg.Gisquick.Language,
+		LandingProject: cfg.Gisquick.LandingProject,
 		MapserverURL:   cfg.Gisquick.MapserverURL,
 		MapCacheRoot:   cfg.Gisquick.MapCacheRoot,
 		ProjectsRoot:   cfg.Gisquick.ProjectsRoot,
