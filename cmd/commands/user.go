@@ -24,15 +24,16 @@ var (
 )
 
 type Account struct {
-	Username   string     `json:"username"`
-	Email      string     `json:"email"`
-	Password   string     `json:"password"`
-	FirstName  string     `json:"first_name"`
-	LastName   string     `json:"last_name"`
-	Active     bool       `json:"is_active"`
-	Superuser  bool       `json:"is_superuser"`
-	DateJoined *time.Time `json:"date_joined"`
-	LastLogin  *time.Time `json:"last_login"`
+	Username  string     `json:"username"`
+	Email     string     `json:"email"`
+	Password  string     `json:"password"`
+	FirstName string     `json:"first_name"`
+	LastName  string     `json:"last_name"`
+	Active    bool       `json:"is_active"`
+	Superuser bool       `json:"is_superuser"`
+	Created   *time.Time `json:"created_at"`
+	Confirmed *time.Time `json:"confirmed_at"`
+	LastLogin *time.Time `json:"last_login_at"`
 }
 
 func runUserCommand(command func(dbConn *sqlx.DB, args conf.Args) error) error {
@@ -103,8 +104,6 @@ func createAccount() (domain.Account, error) {
 		return domain.Account{}, err
 	}
 	account.Active = true
-	now := time.Now() //.UTC()
-	account.DateJoined = &now
 	return account, nil
 }
 
@@ -122,7 +121,7 @@ func addSuperuser(dbConn *sqlx.DB, args conf.Args) error {
 	if err != nil {
 		return fmt.Errorf("creating superuser account: %w", err)
 	}
-	account.IsSuperuser = true
+	account.Superuser = true
 	accountsRepo := postgres.NewAccountsRepository(dbConn)
 	return accountsRepo.Create(account)
 }
@@ -137,21 +136,22 @@ func utcTime(t *time.Time) *time.Time {
 
 func dumpUsers(dbConn *sqlx.DB, args conf.Args) error {
 	var dbUsers []postgres.User
-	if err := dbConn.Select(&dbUsers, `SELECT * FROM app_user`); err != nil {
+	if err := dbConn.Select(&dbUsers, `SELECT * FROM users`); err != nil {
 		return fmt.Errorf("querying users: %w", err)
 	}
 	accounts := make([]Account, len(dbUsers))
 	for i, u := range dbUsers {
 		accounts[i] = Account{
-			Username:   u.Username,
-			Email:      u.Email,
-			Password:   string(u.Password),
-			FirstName:  u.FirstName,
-			LastName:   u.LastName,
-			Active:     u.IsActive,
-			Superuser:  u.IsSuperuser,
-			DateJoined: utcTime(u.DateJoined),
-			LastLogin:  utcTime(u.LastLogin),
+			Username:  u.Username,
+			Email:     u.Email,
+			Password:  string(u.Password),
+			FirstName: u.FirstName,
+			LastName:  u.LastName,
+			Active:    u.IsActive,
+			Superuser: u.IsSuperuser,
+			Created:   utcTime(u.Created),
+			Confirmed: utcTime(u.Confirmed),
+			LastLogin: utcTime(u.LastLogin),
 		}
 	}
 	encoder := json.NewEncoder(os.Stdout)
@@ -175,15 +175,16 @@ func loadUsers(dbConn *sqlx.DB, args conf.Args) error {
 	accountsRepo := postgres.NewAccountsRepository(dbConn)
 	for _, u := range users {
 		a := domain.Account{
-			Username:    u.Username,
-			Email:       u.Email,
-			Password:    []byte(u.Password),
-			FirstName:   u.FirstName,
-			LastName:    u.LastName,
-			IsSuperuser: u.Superuser,
-			Active:      u.Active,
-			DateJoined:  u.DateJoined,
-			LastLogin:   u.LastLogin,
+			Username:  u.Username,
+			Email:     u.Email,
+			Password:  []byte(u.Password),
+			FirstName: u.FirstName,
+			LastName:  u.LastName,
+			Superuser: u.Superuser,
+			Active:    u.Active,
+			Created:   u.Created,
+			Confirmed: u.Confirmed,
+			LastLogin: u.LastLogin,
 		}
 		if err := accountsRepo.Create(a); err != nil {
 			fmt.Printf("failed to create account: %s (%s)\n", a.Username, err)

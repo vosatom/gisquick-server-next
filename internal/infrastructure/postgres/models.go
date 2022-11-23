@@ -10,6 +10,7 @@ type User struct {
 	LastName    string     `db:"last_name"`
 	IsSuperuser bool       `db:"is_superuser"`
 	IsActive    bool       `db:"is_active"`
-	DateJoined  *time.Time `db:"date_joined"`
-	LastLogin   *time.Time `db:"last_login"`
+	Created     *time.Time `db:"created_at"`
+	Confirmed   *time.Time `db:"confirmed_at"`
+	LastLogin   *time.Time `db:"last_login_at"`
 }

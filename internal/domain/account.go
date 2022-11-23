@@ -55,19 +55,20 @@ func checkPbkdf2(password, encoded string, keyLen int, h func() hash.Hash) (bool
 
 // Account entity
 type Account struct {
-	Username    string
-	Email       string
-	Password    []byte
-	FirstName   string
-	LastName    string
-	IsSuperuser bool
-	Active      bool
-	DateJoined  *time.Time
-	LastLogin   *time.Time
+	Username  string
+	Email     string
+	Password  []byte
+	FirstName string
+	LastName  string
+	Superuser bool
+	Active    bool
+	Created   *time.Time
+	Confirmed *time.Time
+	LastLogin *time.Time
 }
 
 func (a *Account) IsActive() bool {
-	return a.Active && a.DateJoined != nil
+	return a.Active && a.Confirmed != nil
 }
 
 func (a *Account) Activate() error {
@@ -75,7 +76,7 @@ func (a *Account) Activate() error {
 		return ErrAccountActive
 	}
 	now := time.Now()
-	a.DateJoined = &now
+	a.Confirmed = &now
 	a.Active = true
 	return nil
 }
@@ -120,11 +121,13 @@ func NewAccount(username, email, firstName, lastName, password string) (Account,
 	if email != "" && !validateEmail(email) {
 		return Account{}, fmt.Errorf("invalid email: '%s'", email)
 	}
+	now := time.Now() //.UTC()
 	account := Account{
 		Username:  username,
 		Email:     email,
 		FirstName: strings.TrimSpace(firstName),
 		LastName:  strings.TrimSpace(lastName),
+		Created:   &now,
 	}
 	if password != "" {
 		if err := account.SetPassword(password); err != nil {

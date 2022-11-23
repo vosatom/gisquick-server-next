@@ -21,8 +21,8 @@ func NewAccountsRepository(db *sqlx.DB) *AccountsRepository {
 func (r *AccountsRepository) Create(account domain.Account) error {
 	dbUser := toUser(account)
 	_, err := r.db.NamedExec(
-		`INSERT INTO app_user (username, email, password, first_name, last_name, is_superuser, is_active, date_joined, last_login)
-		VALUES (:username, :email, :password, :first_name, :last_name, :is_superuser, :is_active, :date_joined, :last_login)`,
+		`INSERT INTO users (username, email, password, first_name, last_name, is_superuser, is_active, created_at, confirmed_at, last_login_at)
+		VALUES (:username, :email, :password, :first_name, :last_name, :is_superuser, :is_active, :created_at, :confirmed_at, :last_login_at)`,
 		&dbUser,
 	)
 	if err != nil {
@@ -40,7 +40,7 @@ func (r *AccountsRepository) Create(account domain.Account) error {
 }
 
 func (r *AccountsRepository) Delete(username string) error {
-	_, err := r.db.Exec("DELETE FROM app_user WHERE username=$1", username)
+	_, err := r.db.Exec("DELETE FROM users WHERE username=$1", username)
 	return err
 }
 
@@ -57,13 +57,13 @@ func (r *AccountsRepository) find(q string, args ...interface{}) (domain.Account
 }
 
 func (r *AccountsRepository) GetByUsername(username string) (domain.Account, error) {
-	account, err := r.find("SELECT * FROM app_user WHERE username=$1", username)
+	account, err := r.find("SELECT * FROM users WHERE username=$1", username)
 	return account, err
 }
 
 func (r *AccountsRepository) GetByEmail(email string) (domain.Account, error) {
 	var dbUsers []User
-	err := r.db.Select(&dbUsers, `SELECT * FROM app_user WHERE email LIKE $1`, email)
+	err := r.db.Select(&dbUsers, `SELECT * FROM users WHERE email LIKE $1`, email)
 	if err != nil {
 		return domain.Account{}, err
 	}
@@ -80,7 +80,7 @@ func (r *AccountsRepository) Update(account domain.Account) error {
 	user := toUser(account)
 	const q = `
 	UPDATE
-			app_user
+			users
 	SET
 			"username" = :username,
 			"email" = :email,
@@ -89,8 +89,9 @@ func (r *AccountsRepository) Update(account domain.Account) error {
 			"last_name" = :last_name,
 			"is_superuser" = :is_superuser,
 			"is_active" = :is_active,
-			"date_joined" = :date_joined,
-			"last_login" = :last_login
+			"created_at" = :created_at,
+			"confirmed_at" = :confirmed_at,
+			"last_login_at" = :last_login_at
 	WHERE
 			username = :username
 	`
@@ -100,7 +101,7 @@ func (r *AccountsRepository) Update(account domain.Account) error {
 
 func (r *AccountsRepository) EmailExists(email string) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow("SELECT exists (SELECT 1 FROM app_user WHERE email ILIKE $1)", email).Scan(&exists)
+	err := r.db.QueryRow("SELECT exists (SELECT 1 FROM users WHERE email ILIKE $1)", email).Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
@@ -109,7 +110,7 @@ func (r *AccountsRepository) EmailExists(email string) (bool, error) {
 
 func (r *AccountsRepository) UsernameExists(username string) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow("SELECT exists (SELECT 1 FROM app_user WHERE username = $1)", username).Scan(&exists)
+	err := r.db.QueryRow("SELECT exists (SELECT 1 FROM users WHERE username = $1)", username).Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
@@ -121,7 +122,7 @@ func (r *AccountsRepository) UsernameExists(username string) (bool, error) {
 // 		Username: username,
 // 		IsActive: true,
 // 	}
-// 	_, err := r.db.NamedExec(`UPDATE app_user SET is_active=:is_active WHERE username=:username `, user)
+// 	_, err := r.db.NamedExec(`UPDATE users SET is_active=:is_active WHERE username=:username `, user)
 // 	if err != nil {
 // 		return err
 // 	}
@@ -130,8 +131,8 @@ func (r *AccountsRepository) UsernameExists(username string) (bool, error) {
 
 func (r *AccountsRepository) GetActiveAccounts() ([]domain.Account, error) {
 	var dbUsers []User
-	// err := r.db.Select(&dbUsers, `SELECT username, email, first_name, last_name, is_active, is_superuser, date_joined, last_login FROM app_user WHERE is_active=true`)
-	err := r.db.Select(&dbUsers, `SELECT * FROM app_user WHERE is_active=true`)
+	// err := r.db.Select(&dbUsers, `SELECT username, email, first_name, last_name, is_active, is_superuser, date_joined, last_login FROM users WHERE is_active=true`)
+	err := r.db.Select(&dbUsers, `SELECT * FROM users WHERE is_active=true`)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +145,7 @@ func (r *AccountsRepository) GetActiveAccounts() ([]domain.Account, error) {
 
 func (r *AccountsRepository) GetAllAccounts() ([]domain.Account, error) {
 	var dbUsers []User
-	err := r.db.Select(&dbUsers, `SELECT * FROM app_user`)
+	err := r.db.Select(&dbUsers, `SELECT * FROM users`)
 	if err != nil {
 		return nil, err
 	}
@@ -157,15 +158,16 @@ func (r *AccountsRepository) GetAllAccounts() ([]domain.Account, error) {
 
 func toAccount(user User) domain.Account {
 	return domain.Account{
-		Username:    user.Username,
-		Email:       user.Email,
-		Password:    user.Password,
-		FirstName:   user.FirstName,
-		LastName:    user.LastName,
-		Active:      user.IsActive,
-		DateJoined:  user.DateJoined,
-		LastLogin:   user.LastLogin,
-		IsSuperuser: user.IsSuperuser,
+		Username:  user.Username,
+		Email:     user.Email,
+		Password:  user.Password,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Active:    user.IsActive,
+		Superuser: user.IsSuperuser,
+		Created:   user.Created,
+		Confirmed: user.Confirmed,
+		LastLogin: user.LastLogin,
 	}
 }
 
@@ -177,8 +179,9 @@ func toUser(a domain.Account) User {
 		FirstName:   a.FirstName,
 		LastName:    a.LastName,
 		IsActive:    a.Active,
-		DateJoined:  a.DateJoined,
+		IsSuperuser: a.Superuser,
+		Created:     a.Created,
+		Confirmed:   a.Confirmed,
 		LastLogin:   a.LastLogin,
-		IsSuperuser: a.IsSuperuser,
 	}
 }

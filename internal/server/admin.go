@@ -17,26 +17,28 @@ import (
 )
 
 type Account struct {
-	Username   string     `json:"username"`
-	Email      string     `json:"email"`
-	FirstName  string     `json:"first_name"`
-	LastName   string     `json:"last_name"`
-	Superuser  bool       `json:"superuser"`
-	Active     bool       `json:"active"`
-	DateJoined *time.Time `json:"date_joined"`
-	LastLogin  *time.Time `json:"last_login"`
+	Username  string     `json:"username"`
+	Email     string     `json:"email"`
+	FirstName string     `json:"first_name"`
+	LastName  string     `json:"last_name"`
+	Superuser bool       `json:"superuser"`
+	Active    bool       `json:"active"`
+	Created   *time.Time `json:"created_at"`
+	Confirmed *time.Time `json:"confirmed_at"`
+	LastLogin *time.Time `json:"last_login_at"`
 }
 
 func toAccountInfo(a domain.Account) Account {
 	return Account{
-		Username:   a.Username,
-		Email:      a.Email,
-		FirstName:  a.FirstName,
-		LastName:   a.LastName,
-		Active:     a.Active,
-		Superuser:  a.IsSuperuser,
-		DateJoined: a.DateJoined,
-		LastLogin:  a.LastLogin,
+		Username:  a.Username,
+		Email:     a.Email,
+		FirstName: a.FirstName,
+		LastName:  a.LastName,
+		Active:    a.Active,
+		Superuser: a.Superuser,
+		Created:   a.Created,
+		Confirmed: a.Confirmed,
+		LastLogin: a.LastLogin,
 	}
 }
 
@@ -87,7 +89,7 @@ func (s *Server) handleUpdateUser() func(echo.Context) error {
 		account.FirstName = form.FirstName
 		account.LastName = form.LastName
 		account.Active = form.Active
-		account.IsSuperuser = form.Superuser
+		account.Superuser = form.Superuser
 		if err := s.accountsService.Repository.Update(account); err != nil {
 			return fmt.Errorf("updating account [%s]: %w", username, err)
 		}
@@ -126,7 +128,7 @@ func (s *Server) handleCreateUser() func(echo.Context) error {
 			return err
 		}
 		account.Active = form.Active
-		account.IsSuperuser = form.Superuser
+		account.Superuser = form.Superuser
 		if err := s.accountsService.Repository.Create(account); err != nil {
 			s.log.Errorw("creating account", "username", form.Username, zap.Error(err))
 			return fmt.Errorf("Failed to create user account")
