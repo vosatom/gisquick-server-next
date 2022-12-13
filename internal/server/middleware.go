@@ -67,7 +67,7 @@ func ProjectAdminAccessMiddleware(a *auth.AuthService) echo.MiddlewareFunc {
 	}
 }
 
-func ProjectAccessMiddleware(a *auth.AuthService, ps application.ProjectService) echo.MiddlewareFunc {
+func ProjectAccessMiddleware(a *auth.AuthService, ps application.ProjectService, basicAuthRealm string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			username := c.Param("user")
@@ -106,7 +106,9 @@ func ProjectAccessMiddleware(a *auth.AuthService, ps application.ProjectService)
 			}
 			c.Set("project", projectName)
 			if !access {
-				c.Response().Header().Set(echo.HeaderWWWAuthenticate, "basic realm=Restricted")
+				if basicAuthRealm != "" {
+					c.Response().Header().Set(echo.HeaderWWWAuthenticate, basicAuthRealm)
+				}
 				return echo.ErrUnauthorized
 			}
 			return next(c)
