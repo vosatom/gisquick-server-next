@@ -16,20 +16,10 @@ type App struct {
 
 type UserInfo struct {
 	Username  string `json:"username"`
-	Email     string `json:"email"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	FullName  string `json:"full_name"`
 	Active    bool   `json:"active"`
-}
-
-func dtoUser(u domain.User) UserInfo {
-	return UserInfo{
-		Username:  u.Username,
-		Email:     u.Email,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-	}
 }
 
 type AppPayload struct {
@@ -75,7 +65,6 @@ func (s *Server) handleGetUsers(c echo.Context) error {
 	for _, u := range accounts {
 		res = append(res, UserInfo{
 			Username:  u.Username,
-			Email:     u.Email,
 			FirstName: u.FirstName,
 			LastName:  u.LastName,
 			FullName:  u.FullName(),
