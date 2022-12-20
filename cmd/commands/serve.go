@@ -14,6 +14,7 @@ import (
 
 	"github.com/ardanlabs/conf/v2"
 	"github.com/gisquick/gisquick-server/internal/application"
+	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/gisquick/gisquick-server/internal/infrastructure/email"
 	"github.com/gisquick/gisquick-server/internal/infrastructure/postgres"
 	"github.com/gisquick/gisquick-server/internal/infrastructure/project"
@@ -62,17 +63,18 @@ func (b *ByteSize) UnmarshalText(text []byte) error {
 func Serve() error {
 	cfg := struct {
 		Gisquick struct {
-			Debug             bool   `conf:"default:false"`
-			Language          string `conf:"default:en-us"`
-			ProjectsRoot      string `conf:"default:/publish"`
-			MapCacheRoot      string
-			MapserverURL      string
-			PluginsURL        string
-			SignupAPI         bool
-			ProjectSizeLimit  ByteSize `conf:"default:-1"`
-			UserStorageLimit  ByteSize `conf:"default:-1"`
-			UserProjectsLimit int      `conf:"default:-1"`
-			LandingProject    string
+			Debug                bool   `conf:"default:false"`
+			Language             string `conf:"default:en-us"`
+			ProjectsRoot         string `conf:"default:/publish"`
+			MapCacheRoot         string
+			MapserverURL         string
+			PluginsURL           string
+			SignupAPI            bool
+			ProjectSizeLimit     ByteSize `conf:"default:-1"`
+			AccountStorageLimit  ByteSize `conf:"default:-1"`
+			AccountProjectsLimit int      `conf:"default:-1"`
+			AccountLimiterConfig string
+			LandingProject       string
 		}
 		Auth struct {
 			SessionExpiration time.Duration `conf:"default:24h"`
@@ -93,7 +95,7 @@ func Serve() error {
 			Name         string `conf:"default:postgres,env:POSTGRES_DB"`
 			MaxIdleConns int    `conf:"default:3"`
 			MaxOpenConns int    `conf:"default:3"`
-			SSLMode      string `conf:"default:prefer"`
+			SSLMode      string `conf:"default:disable"`
 		}
 		Redis struct {
 			Addr     string `conf:"default:redis:6379"` // "/var/run/redis/redis.sock"
@@ -216,15 +218,21 @@ func Serve() error {
 	authServ := auth.NewAuthService(log, cfg.Auth.SessionExpiration, accountsRepo, sessionStore)
 
 	projectsRepo := project.NewDiskStorage(log, cfg.Gisquick.ProjectsRoot)
-	limiter := &project.SimpleProjectsLimiter{
-		MaxProjectsCount: cfg.Gisquick.UserProjectsLimit,
-		MaxProjectSize:   int64(cfg.Gisquick.ProjectSizeLimit),
-		StorageLimit:     int64(cfg.Gisquick.UserStorageLimit),
+	defaultAccountConfig := domain.AccountConfig{
+		ProjectsCountLimit: cfg.Gisquick.AccountProjectsLimit,
+		ProjectSizeLimit:   domain.ByteSize(cfg.Gisquick.ProjectSizeLimit),
+		StorageLimit:       domain.ByteSize(cfg.Gisquick.AccountStorageLimit),
+	}
+	var limiter application.AccountsLimiter
+	if cfg.Gisquick.AccountLimiterConfig != "" {
+		limiter = project.NewConfigurableProjectsLimiter(log, cfg.Gisquick.AccountLimiterConfig, defaultAccountConfig)
+	} else {
+		limiter = project.NewSimpleProjectsLimiter(defaultAccountConfig)
 	}
 	projectsServ := application.NewProjectsService(log, projectsRepo, limiter)
 
 	sws := ws.NewSettingsWS(log)
-	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws)
+	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws, limiter)
 
 	// Start server
 	go func() {

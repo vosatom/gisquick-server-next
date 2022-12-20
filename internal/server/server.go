@@ -42,6 +42,7 @@ type Server struct {
 	accountsService *application.AccountsService
 	projects        application.ProjectService
 	sws             *ws.SettingsWS
+	limiter         application.AccountsLimiter
 }
 
 type JSONSerializer struct{}
@@ -71,7 +72,9 @@ func (d JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
 	return err
 }
 
-func NewServer(log *zap.SugaredLogger, cfg Config, as *auth.AuthService, signUpService *application.AccountsService, projects application.ProjectService, sws *ws.SettingsWS) *Server {
+func NewServer(log *zap.SugaredLogger, cfg Config,
+	as *auth.AuthService, signUpService *application.AccountsService, projects application.ProjectService,
+	sws *ws.SettingsWS, limiter application.AccountsLimiter) *Server {
 	e := echo.New()
 	e.HideBanner = true
 
@@ -117,6 +120,7 @@ func NewServer(log *zap.SugaredLogger, cfg Config, as *auth.AuthService, signUpS
 		accountsService: signUpService,
 		projects:        projects,
 		sws:             sws,
+		limiter:         limiter,
 	}
 
 	// e.GET("/metrics", echo.WrapHandler(promhttp.Handler()))

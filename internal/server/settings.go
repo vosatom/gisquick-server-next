@@ -187,6 +187,9 @@ func (s *Server) handleUpload() func(echo.Context) error {
 		changes := domain.FilesChanges{Updates: info.Files}
 		if _, err := s.projects.UpdateFiles(projectName, changes, nextFile); err != nil {
 			// better check in future release https://github.com/golang/go/issues/30715
+			if errors.Is(err, application.ErrAccountStorageLimit) {
+				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached account storage limit")
+			}
 			if errors.Is(err, application.ErrProjectSizeLimit) || err.Error() == "http: request body too large" {
 				// s.log.Warn("uploading files: max limit reached")
 				return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached project size limit.")
@@ -347,7 +350,7 @@ func (s *Server) handleCreateProject() func(echo.Context) error {
 			if errors.Is(err, domain.ErrProjectAlreadyExists) {
 				return echo.NewHTTPError(http.StatusConflict, "Project already exists")
 			}
-			if errors.Is(err, application.ErrProjectsCountLimit) {
+			if errors.Is(err, application.ErrAccountProjectsLimit) {
 				return echo.NewHTTPError(http.StatusConflict, "Projects limit was reached")
 			}
 			return err
@@ -632,7 +635,6 @@ func (s *Server) handleDownloadProjectFiles(c echo.Context) error {
 			if !entry.IsDir() {
 				// relPath2 := path[len(rootPath)+1:]
 				relPath, _ := filepath.Rel(rootPath, path)
-				s.log.Infow("download file", "rel", relPath)
 				part, err := writer.Create(relPath)
 				if err != nil {
 					return err

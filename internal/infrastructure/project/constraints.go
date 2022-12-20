@@ -2,31 +2,35 @@ package project
 
 import (
 	"github.com/gisquick/gisquick-server/internal/domain"
+	"github.com/gisquick/gisquick-server/internal/infrastructure/cache"
+	"go.uber.org/zap"
 )
 
 type SimpleProjectsLimiter struct {
-	MaxProjectSize   int64
-	MaxProjectsCount int
-	StorageLimit     int64
-	repo             domain.ProjectsRepository
+	config domain.AccountConfig
 }
 
-func (s *SimpleProjectsLimiter) CheckProjectsLimit(projectName string, count int) (bool, error) {
-	return s.MaxProjectsCount == -1 || count <= s.MaxProjectsCount, nil
+func NewSimpleProjectsLimiter(defaultConfig domain.AccountConfig) *SimpleProjectsLimiter {
+	return &SimpleProjectsLimiter{config: defaultConfig}
 }
 
-func (s *SimpleProjectsLimiter) CheckProjectSizeLimit(projectName string, size int64) (bool, error) {
-	return s.MaxProjectSize == -1 || size <= s.MaxProjectSize, nil
+func (s *SimpleProjectsLimiter) GetAccountLimits(username string) (domain.AccountConfig, error) {
+	return s.config, nil
 }
 
-func (s *SimpleProjectsLimiter) CheckStorageLimit(username string, size int64) (bool, error) {
-	return s.StorageLimit == -1 || size <= s.StorageLimit, nil
+type ConfigurableProjectsLimiter struct {
+	reader *cache.FilesConfigReader[domain.AccountConfig]
 }
 
-func (s *SimpleProjectsLimiter) HasProjectSizeLimit(username string) bool {
-	return s.MaxProjectSize != -1
+func NewConfigurableProjectsLimiter(log *zap.SugaredLogger, configPath string, defaultConfig domain.AccountConfig) *ConfigurableProjectsLimiter {
+	reader := cache.NewFilesConfigReader(log, configPath, defaultConfig)
+	return &ConfigurableProjectsLimiter{reader: reader}
 }
 
-func (s *SimpleProjectsLimiter) HasUserStorageLimit(username string) bool {
-	return s.StorageLimit != -1
+func (l *ConfigurableProjectsLimiter) GetAccountLimits(username string) (domain.AccountConfig, error) {
+	c, err := l.reader.GetConfig(username)
+	if err != nil {
+		return domain.AccountConfig{}, err
+	}
+	return c, nil
 }
