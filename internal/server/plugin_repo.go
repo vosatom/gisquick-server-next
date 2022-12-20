@@ -9,45 +9,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sync"
 	"time"
 
+	"github.com/gisquick/gisquick-server/internal/infrastructure/cache"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/sync/singleflight"
 )
-
-/*
-<plugins>
-</pyqgis_plugin>
-<pyqgis_plugin name="TestTest" version="1.0.2" plugin_id="1605">
-<description><![CDATA[This plugin makes Local Dominance visualisations of raster images]]></description>
-<about><![CDATA[This plugin makes Local Dominance visualisations of raster images which enchances e.g. very subtle features in digital elevation models.]]></about>
-<version>1.0.2</version>
-<trusted>False</trusted>
-<qgis_minimum_version>3.0.0</qgis_minimum_version>
-<qgis_maximum_version>3.99.0</qgis_maximum_version>
-<homepage><![CDATA[https://github.com/ThomasLjungberg/LocalDominance-visualisation]]></homepage>
-<file_name>local_dominance.1.0.2.zip</file_name>
-<icon>/media/packages/2022/icon_Dnhjs7n.png</icon>
-<author_name><![CDATA[Thomas Ljungberg]]></author_name>
-<download_url>https://plugins.qgis.org/plugins/local_dominance/version/1.0.2/download/</download_url>
-<uploaded_by><![CDATA[thomasljungberg]]></uploaded_by>
-<create_date>2019-01-16T08:35:17.180211</create_date>
-<update_date>2022-02-25T14:45:23.136206</update_date>
-<experimental>True</experimental>
-<deprecated>False</deprecated>
-<tracker><![CDATA[https://github.com/ThomasLjungberg/LocalDominance-visualisation/issues]]></tracker>
-<repository><![CDATA[https://github.com/ThomasLjungberg/LocalDominance-visualisation]]></repository>
-<tags><![CDATA[dem,landscape,archaeology,lidar,morphology,visualisation]]></tags>
-<downloads>1883</downloads>
-<average_vote>3.2495938007749032</average_vote>
-<rating_votes>8</rating_votes>
-<external_dependencies></external_dependencies>
-<server>False</server>
-</pyqgis_plugin>
-</plugins>
-*/
 
 type Plugins struct {
 	XMLName xml.Name       `xml:"plugins"`
@@ -93,59 +60,6 @@ func (c CDATA) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 	return e.EncodeElement(struct {
 		string `xml:",cdata"`
 	}{string(c)}, start)
-}
-
-type Item[V any] struct {
-	value     V
-	timestamp int64
-}
-
-type DataCache[K comparable, V any] struct {
-	sync.RWMutex
-	items      map[K]*Item[V]
-	loaderLock *singleflight.Group
-	loader     func(K) (V, error)
-}
-
-// type LoaderFunc[K comparable, V any] func(*DataCache[K, V], K) *Item[K, V]
-// type LoaderFunc[K comparable, V any] func(K) (V, error)
-
-func NewDataCache[K comparable, V any](loader func(K) (V, error)) *DataCache[K, V] {
-	items := make(map[K]*Item[V])
-	loaderLock := &singleflight.Group{}
-	return &DataCache[K, V]{items: items, loaderLock: loaderLock, loader: loader}
-}
-
-func (c *DataCache[K, V]) get(key K) (*Item[V], bool) {
-	c.RLock()
-	defer c.RUnlock()
-	item, ok := c.items[key]
-	return item, ok
-}
-
-func (c *DataCache[K, V]) Get(key K, t int64) (V, error) {
-	item, ok := c.get(key)
-	if !ok || item.timestamp != t {
-		strKey := fmt.Sprintf("%v", key)
-		res, err, _ := c.loaderLock.Do(strKey, func() (interface{}, error) {
-			value, err := c.loader(key)
-			if err != nil {
-				return value, err
-				// return value, fmt.Errorf("loader error: %w", err)
-			}
-			c.Lock()
-			defer c.Unlock()
-			c.items[key] = &Item[V]{value: value, timestamp: t}
-			return value, nil
-		})
-		var v V
-		if err != nil {
-			return v, err
-		}
-		v = res.(V)
-		return v, nil
-	}
-	return item.value, nil
 }
 
 func (s *Server) handleDownloadPlugin(rootDir string) func(echo.Context) error {
@@ -194,7 +108,7 @@ func (s *Server) platformPluginRepoHandler1(rootDir string) func(echo.Context) e
 }
 
 func (s *Server) platformPluginRepoHandler(rootDir string) func(echo.Context) error {
-	cache := NewDataCache(func(filename string) (PyQgisPlugin, error) {
+	cache := cache.NewDataCache(func(filename string) (PyQgisPlugin, error) {
 		var plugin PyQgisPlugin
 		s.log.Infow("loading qgis plugin metadata", "file", filename)
 		f, err := os.Open(filename)
@@ -250,19 +164,3 @@ func (s *Server) platformPluginRepoHandler(rootDir string) func(echo.Context) er
 		return c.XML(http.StatusOK, Plugins{Plugins: plugins})
 	}
 }
-
-/*
-https://dev.gisquick.org/api/plugins/lin64
-
-or
-
-https://plugins.gisquick.org/platform/linux
-https://plugins.gisquick.org/platform/windows
-https://plugins.gisquick.org/platform/macos
-
-https://plugins.gisquick.org/platform/lin64
-https://plugins.gisquick.org/platform/win64
-https://plugins.gisquick.org/platform/mac64
-
-https://plugins.gisquick.org/download/lin64/gisquick/
-*/
