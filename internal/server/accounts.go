@@ -212,6 +212,9 @@ func (s *Server) handleChangePassword() func(echo.Context) error {
 		}
 		account, err := s.accountsService.Repository.GetByUsername(sessionInfo.Username)
 		if err != nil {
+			if errors.Is(err, domain.ErrAccountNotFound) {
+				return echo.NewHTTPError(http.StatusBadRequest, "Invalid account")
+			}
 			return err
 		}
 		if !account.CheckPassword(form.OldPassword) {
@@ -221,5 +224,23 @@ func (s *Server) handleChangePassword() func(echo.Context) error {
 			return err
 		}
 		return s.accountsService.Repository.Update(account)
+	}
+}
+
+func (s *Server) handleGetAccountInfo() func(echo.Context) error {
+	type Payload struct {
+		AccountLimits domain.AccountConfig `json:"limits"`
+	}
+	return func(c echo.Context) error {
+		user, err := s.auth.GetUser(c)
+		if err != nil {
+			return fmt.Errorf("handleAppInit get user: %w", err)
+		}
+		limits, err := s.limiter.GetAccountLimits(user.Username)
+		if err != nil {
+			s.log.Errorw("getting user account limits", "user", user.Username, zap.Error(err))
+			return fmt.Errorf("Failed to load user account limits")
+		}
+		return c.JSON(http.StatusOK, Payload{AccountLimits: limits})
 	}
 }
