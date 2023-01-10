@@ -555,6 +555,14 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		return nil, err
 	}
 
+	// override proj4 definitions if set in the settings
+	for c, proj4 := range settings.Proj4 {
+		proj, ok := meta.Projections[c]
+		if ok {
+			proj.Proj4 = proj4
+		}
+	}
+
 	// split layers into base layers and overlay layers
 	baseLayers := make([]domain.TreeNode, 0)
 	overlays := make([]domain.TreeNode, 0)

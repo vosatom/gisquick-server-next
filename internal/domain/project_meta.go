@@ -71,7 +71,7 @@ type QgisMeta struct {
 	BaseLayers        []string               `json:"base_layers"`
 	Layers            map[string]LayerMeta   `json:"layers"`
 	Projection        string                 `json:"projection"`
-	Projections       map[string]Projection  `json:"projections"`
+	Projections       map[string]*Projection `json:"projections"`
 	Units             map[string]interface{} `json:"units"`
 	ComposerTemplates []interface{}          `json:"composer_templates"`
 	Client            map[string]interface{} `json:"client_info"`
