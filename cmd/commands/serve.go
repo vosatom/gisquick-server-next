@@ -77,8 +77,9 @@ func Serve() error {
 			LandingProject       string
 		}
 		Auth struct {
-			SessionExpiration time.Duration `conf:"default:24h"`
-			SecretKey         string        `conf:"default:secret-key,mask"`
+			SessionExpiration    time.Duration `conf:"default:24h"`
+			EmailTokenExpiration time.Duration `conf:"default:72h"`
+			SecretKey            string        `conf:"default:secret-key,mask"`
 		}
 		Web struct {
 			ReadTimeout     time.Duration `conf:"default:5s"`
@@ -204,7 +205,7 @@ func Serve() error {
 
 	// Services
 	accountsRepo := postgres.NewAccountsRepository(dbConn)
-	tokenGenerator := security.NewTokenGenerator(cfg.Auth.SecretKey, "signup", cfg.Auth.SessionExpiration)
+	tokenGenerator := security.NewTokenGenerator(cfg.Auth.SecretKey, "signup", cfg.Auth.EmailTokenExpiration)
 	emailSender := email.NewAccountsEmailSender(
 		es,
 		cfg.Email.Sender,
