@@ -48,7 +48,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 
 	e.POST("/api/project/:user/:name", s.handleCreateProject(), LoginRequired)
 	e.DELETE("/api/project/:user/:name", s.handleDeleteProject, ProjectAdminAccess)
-	e.GET("/api/projects", s.handleGetProjects, LoginRequired)
+	e.GET("/api/projects", s.handleGetProjects)
 	e.GET("/api/projects/:user", s.handleGetUserProjects, SuperuserRequired)
 	e.POST("/api/project/upload/:user/:name", s.handleUpload(), ProjectAdminAccess)
 

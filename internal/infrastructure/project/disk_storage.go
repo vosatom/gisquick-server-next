@@ -309,6 +309,7 @@ func (s *DiskStorage) GetProjectInfo(name string) (domain.ProjectInfo, error) {
 		s.log.Errorw("parsing project file", zap.Error(err))
 		return pInfo, fmt.Errorf("reading project file: %w", err)
 	}
+	pInfo.Name = name
 	return pInfo, nil
 }
 

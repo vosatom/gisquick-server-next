@@ -105,7 +105,6 @@ func (s *projectService) GetUserProjects(username string) ([]domain.ProjectInfo,
 	data := make([]domain.ProjectInfo, len(projects))
 	for i, name := range projects {
 		info, err := s.repo.GetProjectInfo(name)
-		info.Name = name
 		if err != nil {
 			// TODO: skip or fail?
 			return nil, err

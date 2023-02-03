@@ -45,9 +45,24 @@ func (s *Server) handleGetProjectFiles() func(echo.Context) error {
 }
 
 func (s *Server) handleGetProjects(c echo.Context) error {
+	projectsParam := c.Request().URL.Query().Get("projects")
+	if projectsParam != "" {
+		names := strings.Split(projectsParam, ",")
+		data := make([]domain.ProjectInfo, 0, len(names))
+		for _, name := range names {
+			p, err := s.projects.GetProjectInfo(strings.TrimSpace(name))
+			if err == nil {
+				data = append(data, p)
+			}
+		}
+		return c.JSON(http.StatusOK, data)
+	}
 	user, err := s.auth.GetUser(c)
 	if err != nil {
 		return err
+	}
+	if !user.IsAuthenticated {
+		return echo.ErrUnauthorized
 	}
 	data, err := s.projects.GetUserProjects(user.Username)
 	if err != nil {
