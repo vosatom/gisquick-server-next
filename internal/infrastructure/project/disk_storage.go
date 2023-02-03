@@ -149,14 +149,14 @@ func NewDiskStorage(log *zap.SugaredLogger, projectsRoot string) *DiskStorage {
 	}
 	loader := ttlcache.LoaderFunc[string, *FilesIndex](
 		func(c *ttlcache.Cache[string, *FilesIndex], project string) *ttlcache.Item[string, *FilesIndex] {
-			log.Infof("ttlcache.LoaderFunc: %s", project)
+			log.Debugf("ttlcache.LoaderFunc: %s", project)
 
 			indexData, err := ds.loadFilesIndex(project)
 			if err != nil {
-				log.Errorw("failed to read files index file", "project", project, zap.Error(err))
-				files, err := ds.createFilesMap(project)
+				log.Errorw("reading files index file", "project", project, zap.Error(err))
+				files, _, err := ds.createFilesMap(project)
 				if err != nil {
-					log.Errorw("failed to list project files", "project", project, zap.Error(err))
+					log.Errorw("listing project files", "project", project, zap.Error(err))
 					// TODO: return nil or empty index?
 					// var emptyIndex map[string]*domain.FileInfo
 					// emptyIndex := &FilesIndex{Index: emptyIndex}
@@ -166,7 +166,7 @@ func NewDiskStorage(log *zap.SugaredLogger, projectsRoot string) *DiskStorage {
 					absPath := filepath.Join(projectsRoot, project, path)
 					hash, err := Checksum(absPath)
 					if err != nil {
-						log.Errorw("failed to list project files", "project", project, zap.Error(err))
+						log.Errorw("listing project files", "project", project, zap.Error(err))
 						return nil
 					}
 					// info := files[path]
@@ -319,11 +319,12 @@ func (s *DiskStorage) GetProjectInfo(name string) (domain.ProjectInfo, error) {
 // 	}
 // }
 
-func (s *DiskStorage) createFilesMap(project string) (map[string]domain.FileInfo, error) {
+func (s *DiskStorage) createFilesMap(project string) (map[string]domain.FileInfo, map[string]domain.FileInfo, error) {
 	files := make(map[string]domain.FileInfo)
+	excludedFiles := make(map[string]domain.FileInfo)
 	root, err := filepath.Abs(filepath.Join(s.ProjectsRoot, project))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -335,20 +336,25 @@ func (s *DiskStorage) createFilesMap(project string) (map[string]domain.FileInfo
 		}
 		if !entry.IsDir() {
 			relPath := path[len(root)+1:]
-			if !strings.HasPrefix(relPath, ".gisquick/") && !strings.HasSuffix(relPath, "~") && !excludeExtRegex.Match([]byte(relPath)) {
+			if !strings.HasPrefix(relPath, ".gisquick/") && !strings.HasSuffix(relPath, "~") {
 				fInfo, err := entry.Info()
 				if err != nil {
 					return fmt.Errorf("getting file info: %w", err)
 				}
-				files[relPath] = domain.FileInfo{Size: fInfo.Size(), Mtime: fInfo.ModTime().Unix()}
+				entry := domain.FileInfo{Size: fInfo.Size(), Mtime: fInfo.ModTime().Unix()}
+				if excludeExtRegex.Match([]byte(relPath)) {
+					excludedFiles[relPath] = entry
+				} else {
+					files[relPath] = entry
+				}
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing project files: %w", err)
+		return nil, nil, fmt.Errorf("listing project files: %w", err)
 	}
-	return files, nil
+	return files, excludedFiles, nil
 }
 
 // TODO: update files index when not up to date
@@ -405,18 +411,18 @@ func (s *DiskStorage) ListProjectFiles1(project string, checksum bool) ([]domain
 }
 */
 
-func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.ProjectFile, error) {
+func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.ProjectFile, []domain.ProjectFile, error) {
 	if !s.CheckProjectExists(project) {
-		return nil, domain.ErrProjectNotExists
+		return nil, nil, domain.ErrProjectNotExists
 	}
-	filesMap, err := s.createFilesMap(project)
+	filesMap, temporaryFiles, err := s.createFilesMap(project)
 	if err != nil {
-		return nil, fmt.Errorf("listing project files: %w", err)
+		return nil, nil, fmt.Errorf("listing project files: %w", err)
 	}
 	index, err := s.filesIndex(project)
 	if err != nil {
-		s.log.Errorw("reading files index", "project", project, zap.Error(err))
-		// return nil, fmt.Errorf("loading files index: %w", err)
+		s.log.Errorw("reading project files index", "project", project, zap.Error(err))
+		return nil, nil, fmt.Errorf("reading project files index: %w", err)
 	}
 	indexUpdated := false
 	files := make([]domain.ProjectFile, len(filesMap))
@@ -426,7 +432,6 @@ func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.
 			Path:  path,
 			Size:  info.Size,
 			Mtime: info.Mtime,
-			// Mtime: time.Unix(info.Mtime, 0),
 		}
 		if checksum {
 			cachedInfo, hasCachedInfo := index.Get(path)
@@ -436,7 +441,7 @@ func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.
 				absPath := filepath.Join(s.ProjectsRoot, project, path)
 				hash, err := Checksum(absPath)
 				if err != nil {
-					return nil, fmt.Errorf("computing checksum: %w", err)
+					return nil, nil, fmt.Errorf("computing checksum: %w", err)
 				}
 				f.Hash = hash
 				// update file info in the index
@@ -467,7 +472,18 @@ func (s *DiskStorage) ListProjectFiles(project string, checksum bool) ([]domain.
 			s.log.Errorw("updating project size", "project", project, zap.Error(err))
 		}
 	}
-	return files, nil
+	tempFiles := make([]domain.ProjectFile, len(temporaryFiles))
+	i = 0
+	for path, info := range temporaryFiles {
+		// without checksums
+		tempFiles[i] = domain.ProjectFile{
+			Path:  path,
+			Size:  info.Size,
+			Mtime: info.Mtime,
+		}
+		i += 1
+	}
+	return files, tempFiles, nil
 }
 
 // func (s *DiskStorage) GetFileInfo(project, path string, checksum bool) (domain.FileInfo, error) {
@@ -581,37 +597,43 @@ func saveToFile2(src io.Reader, filename string) (h string, err error) {
 	return hash, nil
 }
 
-func (s *DiskStorage) CreateFile(projectName, pattern string, r io.Reader, size int64) (finfo domain.ProjectFile, err error) {
+func (s *DiskStorage) CreateFile(projectName, directory, pattern string, r io.Reader) (finfo domain.ProjectFile, err error) {
 	finfo = domain.ProjectFile{}
 	if !s.CheckProjectExists(projectName) {
 		err = domain.ErrProjectNotExists
 		return
 	}
-	// index, err := s.filesIndex(projectName)
-	// if err != nil {
-	// 	err = fmt.Errorf("reading files index: %w", err)
-	// 	return
-	// }
-	// projectSize := index.TotalSize()
-	// if projectSize+size > s.MaxProjectSize {
-	// 	err = domain.ErrProjectSize
-	// 	return
-	// }
-	destDir := filepath.Join(s.ProjectsRoot, projectName, ".temp")
+	destDir := filepath.Join(s.ProjectsRoot, projectName, directory)
 	err = os.MkdirAll(destDir, 0777)
 	if err != nil {
-		err = fmt.Errorf("creating .temp directory: %w", err)
+		err = fmt.Errorf("creating directory: %w", err)
 		return
 	}
-	f, err := os.CreateTemp(destDir, pattern)
-	if err != nil {
-		err = fmt.Errorf("creating temp file: %w", err)
-		return
+	var f *os.File
+	// pre-formatting: timestamp, random
+	// post-formatting: hash
+	if strings.Contains(pattern, "<timestamp>") {
+		pattern = strings.Replace(pattern, "<timestamp>", fmt.Sprint(time.Now().Unix()), 1)
 	}
-	s.log.Debugw("created temporary file", "path", f.Name())
+	if strings.Contains(pattern, "<random>") {
+		pattern = strings.Replace(pattern, "<random>", "*", 1)
+		f, err = os.CreateTemp(destDir, pattern)
+		if err != nil {
+			err = fmt.Errorf("creating temp file: %w", err)
+			return
+		}
+		pattern = filepath.Base(f.Name())
+	}
+	if f == nil {
+		f, err = os.Create(filepath.Join(destDir, pattern))
+		if err != nil {
+			err = fmt.Errorf("creating new file: %w", err)
+			return
+		}
+	}
 	defer func() {
 		// Clean up in case we are returning with an error
-		if err != nil {
+		if f != nil && err != nil {
 			f.Close()
 			os.Remove(f.Name())
 		}
@@ -635,7 +657,29 @@ func (s *DiskStorage) CreateFile(projectName, pattern string, r io.Reader, size 
 	finfo.Mtime = fStat.ModTime().Unix()
 	finfo.Path = f.Name()
 	finfo.Hash = fmt.Sprintf("%x", sha.Sum(nil))
-	s.log.Debugw("SaveFile", "path", f.Name(), "hash", finfo.Hash)
+
+	if strings.Contains(pattern, "<hash>") {
+		pattern = strings.Replace(pattern, "<hash>", finfo.Hash[:10], 1)
+		if err = os.Rename(f.Name(), filepath.Join(destDir, pattern)); err != nil {
+			return
+		}
+	}
+	finfo.Path = filepath.Join(directory, pattern)
+	f = nil
+	index, err := s.filesIndex(projectName)
+	if err != nil {
+		s.log.Errorw("reading files index", "project", projectName, zap.Error(err))
+		return
+	}
+	index.Set(finfo.Path, domain.FileInfo{Hash: finfo.Hash, Size: finfo.Size, Mtime: finfo.Mtime})
+	pInfo, err := s.GetProjectInfo(projectName)
+	if err != nil {
+		s.log.Errorw("getting project info", zap.Error(err))
+	}
+	pInfo.Size += finfo.Size
+	if err := s.saveConfigFile(projectName, "project.json", pInfo); err != nil {
+		s.log.Errorw("updating project file", zap.Error(err))
+	}
 	return
 }
 

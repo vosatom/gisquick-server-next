@@ -24,9 +24,9 @@ type ProjectService interface {
 	GetProjectInfo(projectName string) (domain.ProjectInfo, error)
 	GetUserProjects(username string) ([]domain.ProjectInfo, error)
 	// SaveFile(projectName, filename string, r io.Reader) (string, error)
-	SaveFile(projectName, dir, pattern string, r io.Reader, size int64) (string, error)
+	SaveFile(projectName, dir, pattern string, r io.Reader, size int64) (domain.ProjectFile, error)
 	DeleteFile(projectName, path string) error
-	ListProjectFiles(projectName string, checksum bool) ([]domain.ProjectFile, error)
+	ListProjectFiles(projectName string, checksum bool) ([]domain.ProjectFile, []domain.ProjectFile, error)
 
 	GetQgisMetadata(projectName string, data interface{}) error
 	UpdateMeta(projectName string, meta json.RawMessage) error
@@ -93,7 +93,7 @@ func (s *projectService) Delete(name string) error {
 	return s.repo.Delete(name)
 }
 
-func (s *projectService) ListProjectFiles(project string, checksum bool) ([]domain.ProjectFile, error) {
+func (s *projectService) ListProjectFiles(project string, checksum bool) ([]domain.ProjectFile, []domain.ProjectFile, error) {
 	return s.repo.ListProjectFiles(project, checksum)
 }
 
@@ -114,11 +114,12 @@ func (s *projectService) GetUserProjects(username string) ([]domain.ProjectInfo,
 	return data, nil
 }
 
-func (s *projectService) SaveFile(projectName, directory, pattern string, r io.Reader, size int64) (string, error) {
+func (s *projectService) SaveFile(projectName, directory, pattern string, r io.Reader, size int64) (domain.ProjectFile, error) {
 	username := strings.Split(projectName, "/")[0]
 	accountConfig, err := s.limiter.GetAccountLimits(username)
+	var finfo domain.ProjectFile
 	if err != nil {
-		return "", fmt.Errorf("getting user account limits config: %w", err)
+		return finfo, fmt.Errorf("getting user account limits config: %w", err)
 	}
 	checkProjectSizeLimit := accountConfig.HasProjectSizeLimit()
 	checkStorageLimit := accountConfig.HasStorageLimit()
@@ -128,7 +129,7 @@ func (s *projectService) SaveFile(projectName, directory, pattern string, r io.R
 		var err error
 		projectsSizes, err = s.getProjectsSize(username)
 		if err != nil {
-			return "", fmt.Errorf("checking user storage limit: %w", err)
+			return finfo, fmt.Errorf("checking user storage limit: %w", err)
 		}
 		var totalSize int64 = 0
 		for _, pSize := range projectsSizes {
@@ -136,7 +137,7 @@ func (s *projectService) SaveFile(projectName, directory, pattern string, r io.R
 		}
 		canSave := accountConfig.CheckStorageLimit(totalSize + size)
 		if !canSave {
-			return "", ErrAccountStorageLimit
+			return finfo, ErrAccountStorageLimit
 		}
 	}
 	if checkProjectSizeLimit {
@@ -144,28 +145,21 @@ func (s *projectService) SaveFile(projectName, directory, pattern string, r io.R
 		if !ok {
 			pi, err := s.GetProjectInfo(projectName)
 			if err != nil {
-				return "", fmt.Errorf("getting project size: %w", err)
+				return finfo, fmt.Errorf("getting project size: %w", err)
 			}
 			projectSize = pi.Size
 		}
 		canSave := accountConfig.CheckProjectSizeLimit(projectSize + size)
 		if !canSave {
-			return "", ErrProjectSizeLimit
+			return finfo, ErrProjectSizeLimit
 		}
 	}
 
-	finfo, err := s.repo.CreateFile(projectName, pattern, r, size)
+	finfo, err = s.repo.CreateFile(projectName, directory, pattern, r)
 	if err != nil {
-		return "", fmt.Errorf("saving to temp file: %w", err)
+		return finfo, fmt.Errorf("saving project file: %w", err)
 	}
-	s.log.Debugw("saved to temp file", "info", finfo)
-	// filename := strings.TrimSuffix(filepath.Base(finfo.Path), filepath.Ext(finfo.Path))
-	path := filepath.Join(directory, filepath.Base(finfo.Path))
-	if err = s.repo.SaveFile(projectName, finfo, path); err != nil {
-		// maybe delete temp file?
-		return "", fmt.Errorf("saving project file: %w", err)
-	}
-	return path, nil
+	return finfo, nil
 }
 
 func (s *projectService) DeleteFile(projectName, path string) error {

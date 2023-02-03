@@ -31,16 +31,20 @@ var MaxJSONSize int64 = 1 * MB
 var MaxScriptSize int64 = 5 * MB
 
 func (s *Server) handleGetProjectFiles() func(echo.Context) error {
+	type ProjectFiles struct {
+		Files          []domain.ProjectFile `json:"files"`
+		TemporaryFiles []domain.ProjectFile `json:"temporary"`
+	}
 	return func(c echo.Context) error {
 		projectName := c.Get("project").(string)
-		files, err := s.projects.ListProjectFiles(projectName, true)
+		files, tmpFiles, err := s.projects.ListProjectFiles(projectName, true)
 		if err != nil {
 			if errors.Is(err, domain.ErrProjectNotExists) {
 				return echo.NewHTTPError(http.StatusBadRequest, "Project does not exists")
 			}
 			return fmt.Errorf("handleGetProjectFiles: %w", err)
 		}
-		return c.JSON(http.StatusOK, files)
+		return c.JSON(http.StatusOK, ProjectFiles{files, tmpFiles})
 	}
 }
 
@@ -341,11 +345,6 @@ func (s *Server) handleGetMap() func(echo.Context) error {
 }
 
 func (s *Server) handleCreateProject() func(echo.Context) error {
-	type Info struct {
-		File        string            `json:"file"`
-		ProjectHash string            `json:"project_hash"`
-		Projection  domain.Projection `json:"projection"`
-	}
 	return func(c echo.Context) error {
 		// TODO: check project folder/index file doesn't exists
 		req := c.Request()
@@ -780,6 +779,11 @@ func (s *Server) handleGetMediaFile(c echo.Context) error {
 	return c.File(filepath.Join(s.Config.ProjectsRoot, projectName, filePath))
 }
 
+type MediaFile struct {
+	domain.ProjectFile
+	Filename string `json:"filename"`
+}
+
 func (s *Server) handleUploadMediaFile(c echo.Context) error {
 	projectName := c.Get("project").(string)
 	directory := c.Param("*")
@@ -803,15 +807,14 @@ func (s *Server) handleUploadMediaFile(c echo.Context) error {
 		return fmt.Errorf("reading upload file: %w", err)
 	}
 
-	pattern := "media_*" + strings.ToLower(filepath.Ext(file.Filename))
-	path, err := s.projects.SaveFile(projectName, directory, pattern, src, file.Size)
+	finfo, err := s.projects.SaveFile(projectName, directory, file.Filename, src, file.Size)
 	if err != nil {
 		if errors.Is(err, application.ErrProjectSizeLimit) {
 			return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "Reached project size limit.")
 		}
 		return err
 	}
-	return c.String(http.StatusOK, path)
+	return c.JSON(http.StatusOK, MediaFile{finfo, filepath.Base(finfo.Path)})
 }
 
 func (s *Server) handleDeleteMediaFile(c echo.Context) error {

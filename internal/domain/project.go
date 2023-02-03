@@ -131,14 +131,14 @@ func (s ProjectSettings) UserLayerPermissions(u User, layerId string) LayerPermi
 }
 
 type FileInfo struct {
-	Hash  string `json:"hash"`
+	Hash  string `json:"hash,omitempty"`
 	Size  int64  `json:"size"`
 	Mtime int64  `json:"mtime"`
 }
 
 type ProjectFile struct {
 	Path  string `json:"path"`
-	Hash  string `json:"hash"`
+	Hash  string `json:"hash,omitempty"`
 	Size  int64  `json:"size"`
 	Mtime int64  `json:"mtime"`
 }
@@ -201,12 +201,12 @@ type ProjectsRepository interface {
 	GetProjectInfo(name string) (ProjectInfo, error)
 	Delete(name string) error
 	// SaveFile(projectName, filename string, r io.Reader) error
-	CreateFile(projectName, pattern string, r io.Reader, size int64) (ProjectFile, error)
+	CreateFile(projectName, directory, pattern string, r io.Reader) (ProjectFile, error)
 	SaveFile(project string, finfo ProjectFile, path string) error
 
 	GetFileInfo(project, path string) (FileInfo, error)
 	GetFilesInfo(project string, paths ...string) (map[string]FileInfo, error)
-	ListProjectFiles(project string, checksum bool) ([]ProjectFile, error)
+	ListProjectFiles(project string, checksum bool) ([]ProjectFile, []ProjectFile, error)
 
 	ParseQgisMetadata(projectName string, data interface{}) error
 	UpdateMeta(projectName string, meta json.RawMessage) error
