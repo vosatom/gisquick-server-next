@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
@@ -254,7 +255,7 @@ func (s *DiskStorage) UserProjects(username string) ([]string, error) {
 	userDir := filepath.Join(s.ProjectsRoot, username)
 	entries, err := os.ReadDir(userDir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 			return projectsNames, nil
 		}
 		return projectsNames, fmt.Errorf("listing projects: %v", err)

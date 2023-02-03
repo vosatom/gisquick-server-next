@@ -75,6 +75,7 @@ type QgisMeta struct {
 	Units             map[string]interface{} `json:"units"`
 	ComposerTemplates []interface{}          `json:"composer_templates"`
 	Client            map[string]interface{} `json:"client_info"`
+	ProjectHash       string                 `json:"project_hash"`
 }
 
 type TreeNode interface {
