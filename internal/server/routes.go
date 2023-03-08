@@ -59,7 +59,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.GET("/api/project/info/:user/:name", s.handleGetProjectInfo, ProjectAdminAccess)
 	e.GET("/api/project/full-info/:user/:name", s.handleGetProjectFullInfo(), ProjectAdminAccess)
 
-	e.GET("/api/project/media/:user/:name/*", s.handleGetMediaFile, ProjectAccess)
+	e.GET("/api/project/media/:user/:name/*", s.mediaFileHandler("/tmp/thumbnails"), ProjectAccess)
 	e.POST("/api/project/media/:user/:name/*", s.handleUploadMediaFile, ProjectAccess)
 	e.DELETE("/api/project/media/:user/:name/*", s.handleDeleteMediaFile, ProjectAccess)
 	e.POST("/api/project/script/:user/:name", s.handleScriptUpload(), ProjectAdminAccess)

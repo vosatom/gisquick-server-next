@@ -19,10 +19,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/disintegration/imaging"
 	"github.com/gisquick/gisquick-server/internal/application"
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
+	_ "golang.org/x/image/webp"
+	"golang.org/x/sync/singleflight"
 )
 
 const MB int64 = 1024 * 1024
@@ -758,25 +761,70 @@ func (s *Server) handleMediaFileUpload(c echo.Context) error {
 }
 */
 
-func (s *Server) handleGetMediaFile(c echo.Context) error {
-	projectName := c.Get("project").(string)
-	filePath := c.Param("*")
-	// user, err := s.auth.GetUser(c)
-	// if err != nil {
-	// 	return err
-	// }
-	folder := filepath.Dir(filePath)
-	// mediaFolders := []string{"web"}
-	// for _, mediaFolder := range mediaFolders {
-	// 	relPath, _ := filepath.Rel(mediaFolder, folder)
-	// 	s.log.Infow("test", "relative", relPath)
-	// }
+func (s *Server) mediaFileHandler(cacheDir string) func(echo.Context) error {
+	var lock singleflight.Group
+	return func(c echo.Context) error {
+		projectName := c.Get("project").(string)
+		filePath := c.Param("*")
+		folder := filepath.Dir(filePath)
 
-	if !strings.HasPrefix(folder, "web/") {
-		// return echo.ErrForbidden
-		return echo.ErrNotFound
+		if !strings.HasPrefix(folder, "web/") {
+			return echo.ErrNotFound
+		}
+
+		absPath := filepath.Join(s.Config.ProjectsRoot, projectName, filePath)
+		if strings.EqualFold(c.Request().URL.Query().Get("thumbnail"), "true") {
+			key := filepath.Join(projectName, filePath)
+			val, err, _ := lock.Do(key, func() (interface{}, error) {
+				srcFinfo, err := os.Stat(absPath)
+				if err != nil {
+					return "", err
+				}
+				thumbAbsPath := filepath.Join(cacheDir, key)
+				finfo, err := os.Stat(thumbAbsPath)
+				if err == nil {
+					if finfo.ModTime().Unix() > srcFinfo.ModTime().Unix() {
+						// valid thumbnail image
+						return thumbAbsPath, nil
+					}
+				}
+
+				err = os.MkdirAll(filepath.Dir(thumbAbsPath), 0777)
+				if err != nil {
+					return "", err
+				}
+
+				srcImage, err := imaging.Open(absPath, imaging.AutoOrientation(true))
+				if err != nil {
+					return "", fmt.Errorf("reading media image file: %w", err)
+				}
+
+				dstImageFit := imaging.Fit(srcImage, 500, 500, imaging.Lanczos)
+				format, err := imaging.FormatFromFilename(absPath)
+				if err != nil {
+					format = imaging.JPEG
+				}
+
+				f, err := os.Create(thumbAbsPath)
+				if err != nil {
+					return "", err
+				}
+				defer f.Close()
+				err = imaging.Encode(f, dstImageFit, format, imaging.JPEGQuality(75))
+				return thumbAbsPath, err
+			})
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return echo.NewHTTPError(http.StatusNotFound, "Image not found")
+				}
+				return err
+			}
+			absPath = val.(string)
+		}
+		// maybe when media folders permissions will be implemented
+		// c.Response().Header().Set("Cache-Control", "private, must-revalidate")
+		return c.File(absPath)
 	}
-	return c.File(filepath.Join(s.Config.ProjectsRoot, projectName, filePath))
 }
 
 type MediaFile struct {
