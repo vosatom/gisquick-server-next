@@ -220,5 +220,6 @@ type ProjectsRepository interface {
 	UpdateFiles(projectName string, info FilesChanges, next FilesReader) ([]ProjectFile, error)
 	GetScripts(projectName string) (Scripts, error)
 	UpdateScripts(projectName string, scripts Scripts) error
+	GetProjectCustomizations(projectName string) (json.RawMessage, error)
 	Close()
 }

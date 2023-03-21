@@ -50,6 +50,9 @@ func (s *Server) handleGetProject(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if !s.Config.ProjectCustomization {
+		delete(data, "customizations")
+	}
 	data["status"] = 200
 	// delete(data, "layers")
 	// return c.JSON(http.StatusOK, data["layers"])

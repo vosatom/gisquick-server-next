@@ -19,18 +19,19 @@ import (
 )
 
 type Config struct {
-	Debug             bool
-	Language          string
-	LandingProject    string
-	MapserverURL      string
-	MapCacheRoot      string
-	ProjectsRoot      string
-	SiteURL           string
-	SecretKey         string
-	SessionExpiration time.Duration
-	SignupAPI         bool
-	PluginsURL        string
-	MaxProjectSize    int64
+	Debug                bool
+	Language             string
+	LandingProject       string
+	MapserverURL         string
+	MapCacheRoot         string
+	ProjectsRoot         string
+	SiteURL              string
+	SecretKey            string
+	SessionExpiration    time.Duration
+	SignupAPI            bool
+	PluginsURL           string
+	MaxProjectSize       int64
+	ProjectCustomization bool
 }
 
 type Server struct {

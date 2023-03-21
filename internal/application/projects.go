@@ -790,6 +790,13 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		}
 	}
 	data["topics"] = topics
+	cfg, err := s.repo.GetProjectCustomizations(projectName)
+	if err != nil {
+		s.log.Errorw("reading project customization config", zap.Error(err))
+	}
+	if cfg != nil {
+		data["customizations"] = cfg
+	}
 	return data, nil
 }
 

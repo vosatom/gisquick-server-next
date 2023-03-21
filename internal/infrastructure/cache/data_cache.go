@@ -59,3 +59,9 @@ func (c *DataCache[K, V]) Get(key K, t int64) (V, error) {
 	}
 	return item.value, nil
 }
+
+func (c *DataCache[K, V]) Remove(key K) {
+	c.Lock()
+	defer c.Unlock()
+	delete(c.items, key)
+}

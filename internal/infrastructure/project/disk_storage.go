@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
+	"github.com/gisquick/gisquick-server/internal/infrastructure/cache"
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
 )
@@ -86,6 +87,7 @@ type DiskStorage struct {
 	ProjectsRoot string
 	log          *zap.SugaredLogger
 	indexCache   *ttlcache.Cache[string, *FilesIndex]
+	configCache  *cache.DataCache[string, json.RawMessage]
 }
 
 type Info struct {
@@ -143,9 +145,25 @@ func Checksum(path string) (string, error) {
 var excludeExtRegex = regexp.MustCompile(`(?i).*\.(gpkg-wal|gpkg-shm)$`)
 
 func NewDiskStorage(log *zap.SugaredLogger, projectsRoot string) *DiskStorage {
+	cfgCache := cache.NewDataCache(func(filename string) (json.RawMessage, error) {
+		var config json.RawMessage
+		content, err := ioutil.ReadFile(filename)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("reading project file: %w", err)
+		}
+		err = json.Unmarshal(content, &config)
+		if err != nil {
+			return nil, fmt.Errorf("reading customization file: %w", err)
+		}
+		return config, nil
+	})
 	ds := &DiskStorage{
 		ProjectsRoot: projectsRoot,
 		log:          log,
+		configCache:  cfgCache,
 	}
 	loader := ttlcache.LoaderFunc[string, *FilesIndex](
 		func(c *ttlcache.Cache[string, *FilesIndex], project string) *ttlcache.Item[string, *FilesIndex] {
@@ -1013,4 +1031,24 @@ func (s *DiskStorage) UpdateScripts(projectName string, scripts domain.Scripts) 
 func (s *DiskStorage) Close() {
 	s.indexCache.Stop()
 	s.indexCache.DeleteAll()
+}
+
+func (s *DiskStorage) GetProjectCustomizations(projectName string) (json.RawMessage, error) {
+	filename := filepath.Join(s.ProjectsRoot, projectName, "web", "app", "config.json")
+	fStat, err := os.Stat(filename)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			s.configCache.Remove(filename)
+			return nil, nil
+		}
+		return nil, err
+	}
+	updated := fStat.ModTime()
+	timestamp := updated.Unix()
+
+	config, err := s.configCache.Get(filename, timestamp)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
 }

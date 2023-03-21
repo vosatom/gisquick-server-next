@@ -75,6 +75,7 @@ func Serve() error {
 			AccountProjectsLimit int      `conf:"default:-1"`
 			AccountLimiterConfig string
 			LandingProject       string
+			ProjectCustomization bool
 		}
 		Auth struct {
 			SessionExpiration    time.Duration `conf:"default:24h"`
@@ -192,15 +193,16 @@ func Serve() error {
 	}
 
 	conf := server.Config{
-		Language:       cfg.Gisquick.Language,
-		LandingProject: cfg.Gisquick.LandingProject,
-		MapserverURL:   cfg.Gisquick.MapserverURL,
-		MapCacheRoot:   cfg.Gisquick.MapCacheRoot,
-		ProjectsRoot:   cfg.Gisquick.ProjectsRoot,
-		PluginsURL:     cfg.Gisquick.PluginsURL,
-		SignupAPI:      cfg.Gisquick.SignupAPI,
-		SiteURL:        cfg.Web.SiteURL,
-		MaxProjectSize: int64(cfg.Gisquick.ProjectSizeLimit),
+		Language:             cfg.Gisquick.Language,
+		LandingProject:       cfg.Gisquick.LandingProject,
+		MapserverURL:         cfg.Gisquick.MapserverURL,
+		MapCacheRoot:         cfg.Gisquick.MapCacheRoot,
+		ProjectsRoot:         cfg.Gisquick.ProjectsRoot,
+		PluginsURL:           cfg.Gisquick.PluginsURL,
+		SignupAPI:            cfg.Gisquick.SignupAPI,
+		SiteURL:              cfg.Web.SiteURL,
+		MaxProjectSize:       int64(cfg.Gisquick.ProjectSizeLimit),
+		ProjectCustomization: cfg.Gisquick.ProjectCustomization,
 	}
 
 	// Services
