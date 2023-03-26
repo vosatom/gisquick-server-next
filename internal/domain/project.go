@@ -107,27 +107,36 @@ func (p *UserRolesPermissions) UserTopics() []string {
 	return p.topics
 }
 
-func (s ProjectSettings) UserLayerPermissions(u User, layerId string) LayerPermission {
+func (s ProjectSettings) UserLayerPermissionsFlags(u User, layerId string) Flags {
 	lset, ok := s.Layers[layerId]
 	if !ok || lset.Flags.Has("excluded") {
-		return LayerPermission{}
-	}
-	if s.Auth.Roles == nil {
-		// TODO: map layer wfs flags
-		return LayerPermission{View: true, Insert: true, Update: true, Delete: true}
+		return nil
 	}
 	roles := FilterUserRoles(u, s.Auth.Roles)
+	if len(roles) == 0 {
+		return nil
+	}
 	flags := roles[0].Permissions.Layers[layerId]
-	for _, f := range roles[1:] {
-		flags = flags.Union(f.Permissions.Layers[layerId])
+	for _, role := range roles[1:] {
+		flags = flags.Union(role.Permissions.Layers[layerId])
 	}
+	return flags
+}
 
-	return LayerPermission{
-		View:   flags.Has("view"),
-		Insert: flags.Has("insert"),
-		Update: flags.Has("update"),
-		Delete: flags.Has("delete"),
+func (s ProjectSettings) UserLayerAttrinutesFlags(u User, layerId string) map[string]Flags {
+	roles := FilterUserRoles(u, s.Auth.Roles)
+	finalFlags := make(map[string]Flags)
+	for _, role := range roles {
+		for attrName, flags := range role.Permissions.Attributes[layerId] {
+			f, exists := finalFlags[attrName]
+			if !exists {
+				finalFlags[attrName] = flags
+			} else {
+				finalFlags[attrName] = f.Union(flags)
+			}
+		}
 	}
+	return finalFlags
 }
 
 type FileInfo struct {

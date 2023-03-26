@@ -347,15 +347,6 @@ func (s *projectService) GetLayersData(projectName string) (LayersData, error) {
 	return data, nil
 }
 
-func (s *projectService) GetLayerPermissions(projectName string, layerId string, user domain.User) (domain.LayerPermission, error) {
-	settings, err := s.GetSettings(projectName)
-	if err != nil {
-		return domain.LayerPermission{}, err
-	}
-	return settings.UserLayerPermissions(user, layerId), nil
-	// settings.GetLayerPermissions()
-}
-
 type BaseLayer struct {
 	Name             string                     `json:"name"`
 	Title            string                     `json:"title"`
