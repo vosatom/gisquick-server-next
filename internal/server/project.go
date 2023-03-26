@@ -51,7 +51,7 @@ func (s *Server) handleGetProject(c echo.Context) error {
 		return err
 	}
 	if !s.Config.ProjectCustomization {
-		delete(data, "customizations")
+		delete(data, "app")
 	}
 	data["status"] = 200
 	// delete(data, "layers")

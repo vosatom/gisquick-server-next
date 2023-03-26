@@ -795,7 +795,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		s.log.Errorw("reading project customization config", zap.Error(err))
 	}
 	if cfg != nil {
-		data["customizations"] = cfg
+		data["app"] = cfg
 	}
 	return data, nil
 }
