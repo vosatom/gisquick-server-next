@@ -223,7 +223,7 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 				}
 				return flags
 			}
-			if params.Service == "WMS" {
+			if params.Service == "WMS" && strings.EqualFold(params.Request, "GetMap") {
 				for _, lname := range strings.Split(params.Layers, ",") {
 					if !getLayerPermissions(lname).Has("view") {
 						return echo.ErrForbidden
