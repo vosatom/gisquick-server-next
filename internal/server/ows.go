@@ -17,7 +17,6 @@ import (
 
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/labstack/echo/v4"
-	"go.uber.org/zap"
 )
 
 type GetFeature struct {
@@ -87,12 +86,27 @@ type OwsRequestParams struct {
 	Layers  string `query:"layers"`
 }
 
+type OwsGetFeatureRequestParams struct {
+	TypeName     string `query:"TYPENAME"`
+	PropertyName string `query:"PROPERTYNAME"`
+	FeatureID    string `query:"FEATUREID"`
+}
+
 func parseTypeName(typeName string) (string, error) {
 	parts := strings.Split(typeName, ":")
 	if len(parts) != 2 {
 		return "", fmt.Errorf("Invalid typeName: %s", typeName)
 	}
 	return parts[1], nil
+}
+
+func replaceQueryParam(query url.Values, name, value string) {
+	for param := range query {
+		if strings.EqualFold(param, name) {
+			query.Del(param)
+		}
+	}
+	query.Set(name, value)
 }
 
 func (s *Server) handleMapOws() func(c echo.Context) error {
@@ -180,8 +194,7 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 			if errors.Is(err, domain.ErrProjectNotExists) {
 				return echo.ErrNotFound
 			}
-			s.log.Errorw("ows handler", zap.Error(err))
-			return err
+			return fmt.Errorf("reading project info: %w", err)
 		}
 		settings, err := s.projects.GetSettings(projectName)
 		if err != nil {
@@ -193,10 +206,10 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 		owsProject := filepath.Join("/publish", projectName, pInfo.QgisFile)
 		query := req.URL.Query()
 		query.Set("MAP", owsProject)
-		req.URL.RawQuery = query.Encode()
 
 		if params.Service == "WMS" && strings.EqualFold(params.Request, "GetCapabilities") {
 			req.Header.Set("X-Ows-Url", req.URL.Path)
+			req.URL.RawQuery = query.Encode()
 			capabilitiesProxy.ServeHTTP(c.Response(), req)
 			return nil
 		}
@@ -223,7 +236,7 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 				}
 				return flags
 			}
-			if params.Service == "WMS" && strings.EqualFold(params.Request, "GetMap") {
+			if params.Service == "WMS" && strings.EqualFold(params.Request, "GetMap") && params.Layers != "" {
 				for _, lname := range strings.Split(params.Layers, ",") {
 					if !getLayerPermissions(lname).Has("view") {
 						return echo.ErrForbidden
@@ -237,6 +250,7 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 					attrsFlags, ok := layersAttrsFlags[id]
 					if !ok {
 						attrsFlags = settings.UserLayerAttrinutesFlags(user, id)
+						attrsFlags["geometry"] = []string{"view", "edit"}
 					}
 					return attrsFlags
 				}
@@ -279,23 +293,81 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 						}
 					}
 				} else if strings.EqualFold(params.Request, "GetFeature") {
-					bodyBytes, _ := ioutil.ReadAll(req.Body)
-					var getFeature GetFeature
-					if err := xml.Unmarshal(bodyBytes, &getFeature); err != nil {
-						return err
-					}
-					bodyModified := false
-					for i, q := range getFeature.Query {
-						if !getLayerPermissions(q.TypeName).Has("query") {
+					if req.Method == "POST" {
+						bodyBytes, _ := ioutil.ReadAll(req.Body)
+						var getFeature GetFeature
+						if err := xml.Unmarshal(bodyBytes, &getFeature); err != nil {
+							return err
+						}
+						bodyModified := false
+						for i, q := range getFeature.Query {
+							if !getLayerPermissions(q.TypeName).Has("query") {
+								return echo.ErrForbidden
+							}
+							attrsFlags := getLayerAttributesFlags(q.TypeName)
+							// Note: at least one valid non-geometry field must be specified, otherwise qgis server will return all fields
+							if len(q.Properties) > 0 {
+								nonGeomProperties := 0
+								for _, p := range q.Properties {
+									if p.Name != "geometry" {
+										aFlags, exist := attrsFlags[p.Name]
+										if !exist || !aFlags.Has("view") {
+											return echo.ErrForbidden
+										}
+										nonGeomProperties += 1
+									}
+								}
+								if nonGeomProperties == 0 {
+									return echo.ErrForbidden
+								}
+							} else {
+								properties := []PropertyName{{Name: "geometry"}}
+								for name, flags := range attrsFlags {
+									if flags.Has("view") {
+										properties = append(properties, PropertyName{Name: name})
+									}
+								}
+								if len(properties) == 1 {
+									return echo.ErrForbidden
+								}
+								getFeature.Query[i].Properties = properties
+								bodyModified = true
+							}
+						}
+						if bodyModified {
+							newData, err := xml.Marshal(getFeature)
+							if err != nil {
+								return fmt.Errorf("transforming GetFeature request: %w", err)
+							}
+							req.Body = ioutil.NopCloser(bytes.NewBuffer(newData))
+							newSize := len(newData)
+							req.Header.Set("Content-Length", strconv.Itoa(newSize))
+							req.ContentLength = int64(newSize)
+						} else {
+							req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+						}
+					} else {
+						getFeatureParams := new(OwsGetFeatureRequestParams)
+						if err := (&echo.DefaultBinder{}).BindQueryParams(c, getFeatureParams); err != nil {
+							return echo.NewHTTPError(http.StatusBadRequest, "Invalid GetFeature query parameters")
+						}
+						// note: no support for multiple layers
+						layername := getFeatureParams.TypeName
+						if layername == "" {
+							layername = strings.SplitN(getFeatureParams.FeatureID, ".", 2)[0]
+						}
+						if layername == "" {
+							return echo.ErrBadRequest
+						}
+						if !getLayerPermissions(layername).Has("query") {
 							return echo.ErrForbidden
 						}
-						attrsFlags := getLayerAttributesFlags(q.TypeName)
-						// Note: at least one valid non-geometry field must be specified, otherwise qgis server will return all fields
-						if len(q.Properties) > 0 {
+						attrsFlags := getLayerAttributesFlags(layername)
+						if getFeatureParams.PropertyName != "" {
 							nonGeomProperties := 0
-							for _, p := range q.Properties {
-								if p.Name != "geometry" {
-									aFlags, exist := attrsFlags[p.Name]
+							for _, pName := range strings.Split(getFeatureParams.PropertyName, ",") {
+								if pName != "geometry" {
+									aFlags, exist := attrsFlags[pName]
 									if !exist || !aFlags.Has("view") {
 										return echo.ErrForbidden
 									}
@@ -305,38 +377,23 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 							if nonGeomProperties == 0 {
 								return echo.ErrForbidden
 							}
-							req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 						} else {
-							properties := []PropertyName{{Name: "geometry"}}
+							properties := []string{"geometry"}
 							for name, flags := range attrsFlags {
 								if flags.Has("view") {
-									properties = append(properties, PropertyName{Name: name})
+									properties = append(properties, name)
 								}
 							}
 							if len(properties) == 1 {
 								return echo.ErrForbidden
 							}
-							getFeature.Query[i].Properties = properties
-							bodyModified = true
+							replaceQueryParam(query, "PROPERTYNAME", strings.Join(properties, ","))
 						}
-					}
-					if bodyModified {
-						newData, err := xml.Marshal(getFeature)
-						if err != nil {
-							s.log.Errorw("transforming GetFeature request", zap.Error(err))
-							return err
-						}
-						req.Body = ioutil.NopCloser(bytes.NewBuffer(newData))
-						newSize := len(newData)
-						req.Header.Set("Content-Length", strconv.Itoa(newSize))
-						req.ContentLength = int64(newSize)
-						// s.log.Debugw("GetFeature request", "data", string(newData))
-					} else {
-						req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 					}
 				}
 			}
 		}
+		req.URL.RawQuery = query.Encode()
 		reverseProxy.ServeHTTP(c.Response(), req)
 		return nil
 	}
