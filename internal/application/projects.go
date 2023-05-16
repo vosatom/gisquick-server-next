@@ -655,10 +655,11 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 
 				editable := queryable && lmeta.Flags.Has("edit") && lset.Flags.Has("edit")
 				ldata.Permissions = domain.LayerPermission{
-					View:   queryable,
-					Insert: editable && wfsFlags.Has("insert"),
-					Delete: editable && wfsFlags.Has("delete"),
-					Update: editable && wfsFlags.Has("update"),
+					View:         queryable,
+					Insert:       editable && wfsFlags.Has("insert"),
+					Delete:       editable && wfsFlags.Has("delete"),
+					Update:       editable && wfsFlags.Has("update"),
+					EditGeometry: editable,
 				}
 				if rolesPerms != nil {
 					lperms := rolesPerms.LayerFlags(id)
@@ -685,6 +686,8 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 
 					if rolesPerms != nil {
 						attrsPerms := rolesPerms.AttributesFlags(id)
+						geomPerms, hasGeomPerms := attrsPerms["geometry"]
+						ldata.Permissions.EditGeometry = ldata.Permissions.EditGeometry && (!hasGeomPerms || geomPerms.Has("edit"))
 						isAttributeVisible := func(item string) bool { return attrsPerms[item].Has("view") }
 
 						ldata.AttributeTableFields = GetTableFields(lmeta, lset).Filter(isAttributeVisible)

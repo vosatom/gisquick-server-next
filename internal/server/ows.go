@@ -196,10 +196,6 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 			}
 			return fmt.Errorf("reading project info: %w", err)
 		}
-		settings, err := s.projects.GetSettings(projectName)
-		if err != nil {
-			return fmt.Errorf("getting project settings: %w", err)
-		}
 
 		req := c.Request()
 		// Set MAP parameter
@@ -214,6 +210,10 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 			return nil
 		}
 
+		settings, err := s.projects.GetSettings(projectName)
+		if err != nil {
+			return fmt.Errorf("getting project settings: %w", err)
+		}
 		if len(settings.Auth.Roles) > 0 {
 			user, err := s.auth.GetUser(c)
 			layersPermFlags := make(map[string]domain.Flags)
@@ -250,7 +250,13 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 					attrsFlags, ok := layersAttrsFlags[id]
 					if !ok {
 						attrsFlags = settings.UserLayerAttrinutesFlags(user, id)
-						attrsFlags["geometry"] = []string{"view", "edit"}
+						geomAttrs, ok := attrsFlags["geometry"]
+						if ok {
+							attrsFlags["geometry"] = geomAttrs.Union([]string{"view"})
+						} else {
+							// for backward compatibility
+							attrsFlags["geometry"] = []string{"view", "edit"}
+						}
 					}
 					return attrsFlags
 				}
@@ -307,27 +313,23 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 							attrsFlags := getLayerAttributesFlags(q.TypeName)
 							// Note: at least one valid non-geometry field must be specified, otherwise qgis server will return all fields
 							if len(q.Properties) > 0 {
-								nonGeomProperties := 0
 								for _, p := range q.Properties {
-									if p.Name != "geometry" {
-										aFlags, exist := attrsFlags[p.Name]
-										if !exist || !aFlags.Has("view") {
-											return echo.ErrForbidden
-										}
-										nonGeomProperties += 1
+									aFlags, exist := attrsFlags[p.Name]
+									if !exist || !aFlags.Has("view") {
+										return echo.ErrForbidden
 									}
 								}
-								if nonGeomProperties == 0 {
+								if len(q.Properties) == 1 && q.Properties[0].Name == "geometry" {
 									return echo.ErrForbidden
 								}
 							} else {
-								properties := []PropertyName{{Name: "geometry"}}
+								var properties []PropertyName
 								for name, flags := range attrsFlags {
 									if flags.Has("view") {
 										properties = append(properties, PropertyName{Name: name})
 									}
 								}
-								if len(properties) == 1 {
+								if len(properties) == 0 || (len(properties) == 1 && properties[0].Name == "geometry") {
 									return echo.ErrForbidden
 								}
 								getFeature.Query[i].Properties = properties
@@ -364,27 +366,24 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 						}
 						attrsFlags := getLayerAttributesFlags(layername)
 						if getFeatureParams.PropertyName != "" {
-							nonGeomProperties := 0
-							for _, pName := range strings.Split(getFeatureParams.PropertyName, ",") {
-								if pName != "geometry" {
-									aFlags, exist := attrsFlags[pName]
-									if !exist || !aFlags.Has("view") {
-										return echo.ErrForbidden
-									}
-									nonGeomProperties += 1
+							properties := strings.Split(getFeatureParams.PropertyName, ",")
+							for _, pName := range properties {
+								aFlags, exist := attrsFlags[pName]
+								if !exist || !aFlags.Has("view") {
+									return echo.ErrForbidden
 								}
 							}
-							if nonGeomProperties == 0 {
+							if len(properties) == 1 && properties[0] == "geometry" {
 								return echo.ErrForbidden
 							}
 						} else {
-							properties := []string{"geometry"}
+							var properties []string
 							for name, flags := range attrsFlags {
 								if flags.Has("view") {
 									properties = append(properties, name)
 								}
 							}
-							if len(properties) == 1 {
+							if len(properties) == 0 || (len(properties) == 1 && properties[0] == "geometry") {
 								return echo.ErrForbidden
 							}
 							replaceQueryParam(query, "PROPERTYNAME", strings.Join(properties, ","))

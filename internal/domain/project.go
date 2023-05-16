@@ -42,10 +42,11 @@ type Projection struct {
 }
 
 type LayerPermission struct {
-	View   bool `json:"view"`
-	Insert bool `json:"insert"`
-	Update bool `json:"update"`
-	Delete bool `json:"delete"`
+	View         bool `json:"view"`
+	Insert       bool `json:"insert"`
+	Update       bool `json:"update"`
+	Delete       bool `json:"delete"`
+	EditGeometry bool `json:"edit_geom"`
 }
 
 type UserRolesPermissions struct {
