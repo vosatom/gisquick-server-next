@@ -290,7 +290,7 @@ func (s *Server) handleDeleteProjectFiles() func(echo.Context) error {
 	}
 }
 
-func (s *Server) handleGetMap() func(echo.Context) error {
+func (s *Server) handleProjectOws() func(echo.Context) error {
 	type RequestParams struct {
 		Map string `query:"map"`
 	}
