@@ -48,6 +48,7 @@ type LayerMeta struct {
 	Bands        []string                   `json:"bands,omitempty"`      // raster layers
 	Options      map[string]json.RawMessage `json:"options,omitempty"`
 	Visible      bool                       `json:"visible"`
+	Relations    json.RawMessage            `json:"relations,omitempty"`
 }
 
 type LayerAttribute struct {

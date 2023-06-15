@@ -391,6 +391,7 @@ type OverlayLayer struct {
 	InfoPanelFields      []string                `json:"info_panel_fields,omitempty"`
 	ExportFields         []string                `json:"export_fields,omitempty"`
 	CustomProperties     json.RawMessage         `json:"custom,omitempty"`
+	Relations            json.RawMessage         `json:"relations,omitempty"`
 }
 
 func filterList(list []string, test func(item string) bool) []string {
@@ -623,6 +624,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				Projection:       lmeta.Projection,
 				Type:             lmeta.Type,
 				Metadata:         lmeta.Metadata,
+				Relations:        lmeta.Relations,
 				Hidden:           lset.Flags.Has("hidden"),
 				Queryable:        queryable,
 				InfoPanel:        lset.InfoPanelComponent,
