@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/gisquick/gisquick-server/internal/application"
+	"github.com/gisquick/gisquick-server/internal/infrastructure/project"
 	"github.com/gisquick/gisquick-server/internal/infrastructure/ws"
 	"github.com/gisquick/gisquick-server/internal/server/auth"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/labstack/echo-contrib/prometheus"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
@@ -42,6 +44,7 @@ type Server struct {
 	auth            *auth.AuthService
 	accountsService *application.AccountsService
 	projects        application.ProjectService
+	notifications   *project.RedisNotificationStore
 	sws             *ws.SettingsWS
 	limiter         application.AccountsLimiter
 }
@@ -75,7 +78,7 @@ func (d JSONSerializer) Deserialize(c echo.Context, i interface{}) error {
 
 func NewServer(log *zap.SugaredLogger, cfg Config,
 	as *auth.AuthService, signUpService *application.AccountsService, projects application.ProjectService,
-	sws *ws.SettingsWS, limiter application.AccountsLimiter) *Server {
+	sws *ws.SettingsWS, limiter application.AccountsLimiter, notifications *project.RedisNotificationStore) *Server {
 	e := echo.New()
 	e.HideBanner = true
 
@@ -122,6 +125,7 @@ func NewServer(log *zap.SugaredLogger, cfg Config,
 		projects:        projects,
 		sws:             sws,
 		limiter:         limiter,
+		notifications:   notifications,
 	}
 
 	// e.GET("/metrics", echo.WrapHandler(promhttp.Handler()))

@@ -192,6 +192,8 @@ func Serve() error {
 		}
 	}
 
+	notifications := project.NewRedisNotificationStore(log, rdb)
+
 	conf := server.Config{
 		Language:             cfg.Gisquick.Language,
 		LandingProject:       cfg.Gisquick.LandingProject,
@@ -235,7 +237,7 @@ func Serve() error {
 	projectsServ := application.NewProjectsService(log, projectsRepo, limiter)
 
 	sws := ws.NewSettingsWS(log)
-	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws, limiter)
+	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws, limiter, notifications)
 
 	// Start server
 	go func() {

@@ -27,6 +27,9 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.POST("/api/admin/email_preview", s.handleGetEmailPreview(), SuperuserRequired)
 	e.POST("/api/admin/email", s.handleSendEmail(), SuperuserRequired)
 	e.POST("/api/admin/send_activation_email", s.handleSendActivationEmail(), SuperuserRequired)
+	e.GET("/api/admin/notifications", s.handleGetNotifications, SuperuserRequired)
+	e.POST("/api/admin/notification", s.handleSaveNotification, SuperuserRequired)
+	e.DELETE("/api/admin/notification/:id", s.handleDeleteNotification, SuperuserRequired)
 
 	if s.Config.SignupAPI {
 		e.POST("/api/accounts/signup", s.handleSignUp())
@@ -75,7 +78,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.POST("/api/project/settings/:user/:name", s.handleSaveProjectSettings, ProjectAdminAccess)
 	e.POST("/api/project/thumbnail/:user/:name", s.handleUploadThumbnail, ProjectAdminAccess)
 	e.GET("/api/project/thumbnail/:user/:name", s.handleGetThumbnail)
-	e.GET("/api/map/project/:user/:name", s.handleGetProject, ProjectAccess)
+	e.GET("/api/map/project/:user/:name", s.handleGetProject(), ProjectAccess)
 	owsHandler := s.handleMapOws()
 	e.GET("/api/map/ows/:user/:name", owsHandler, ProjectAccessOWS)
 	e.POST("/api/map/ows/:user/:name", owsHandler, ProjectAccessOWS)

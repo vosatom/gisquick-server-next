@@ -19,37 +19,58 @@ func getProjectName(c echo.Context) string {
 	return filepath.Join(user, name)
 }
 
-func (s *Server) handleGetProject(c echo.Context) error {
-	projectName := getProjectName(c)
-	info, err := s.projects.GetProjectInfo(projectName)
-	if err != nil {
-		if errors.Is(err, domain.ErrProjectNotExists) {
-			s.log.Errorw(err.Error(), "handler", "handleGetProject")
-			s.log.Errorw("handleGetProject", zap.Error(err))
-			return echo.ErrNotFound
+func (s *Server) handleGetProject() func(c echo.Context) error {
+	type Notification struct {
+		ID      string `json:"id"`
+		Title   string `json:"title"`
+		Message string `json:"msg"`
+	}
+	return func(c echo.Context) error {
+		projectName := getProjectName(c)
+		info, err := s.projects.GetProjectInfo(projectName)
+		if err != nil {
+			if errors.Is(err, domain.ErrProjectNotExists) {
+				s.log.Errorw(err.Error(), "handler", "handleGetProject")
+				s.log.Errorw("handleGetProject", zap.Error(err))
+				return echo.ErrNotFound
+			}
+			return err
 		}
-		return err
-	}
-	if info.State != "published" {
-		return echo.NewHTTPError(http.StatusBadRequest, "Project not valid")
-	}
+		if info.State != "published" {
+			return echo.NewHTTPError(http.StatusBadRequest, "Project not valid")
+		}
 
-	// if !s.checkProjectAccess(info, c) {
-	// 	return echo.ErrForbidden
-	// }
+		// if !s.checkProjectAccess(info, c) {
+		// 	return echo.ErrForbidden
+		// }
 
-	user, err := s.auth.GetUser(c)
-	data, err := s.projects.GetMapConfig(projectName, user)
-	if err != nil {
-		return err
+		user, err := s.auth.GetUser(c)
+		data, err := s.projects.GetMapConfig(projectName, user)
+		if err != nil {
+			return err
+		}
+		if !s.Config.ProjectCustomization {
+			delete(data, "app")
+		}
+		notifications, err := s.notifications.GetMapProjectNotifications(projectName, user)
+		if err != nil {
+			s.log.Errorw("getting app notifications", zap.Error(err))
+		} else if len(notifications) > 0 {
+			messages := make([]Notification, len(notifications))
+			for i, n := range notifications {
+				messages[i] = Notification{
+					ID:      n.ID,
+					Title:   n.Title,
+					Message: n.Message,
+				}
+				data["notifications"] = messages
+			}
+		}
+		data["status"] = 200
+		// delete(data, "layers")
+		// return c.JSON(http.StatusOK, data["layers"])
+		return c.JSON(http.StatusOK, data)
 	}
-	if !s.Config.ProjectCustomization {
-		delete(data, "app")
-	}
-	data["status"] = 200
-	// delete(data, "layers")
-	// return c.JSON(http.StatusOK, data["layers"])
-	return c.JSON(http.StatusOK, data)
 }
 
 func (s *Server) handleGetLayerCapabilities() func(c echo.Context) error {
@@ -66,8 +87,6 @@ func (s *Server) handleGetLayerCapabilities() func(c echo.Context) error {
 		err := s.projects.GetQgisMetadata(projectName, &meta)
 		if err != nil {
 			if errors.Is(err, domain.ErrProjectNotExists) {
-				s.log.Errorw(err.Error(), "handler", "handleGetProject")
-				s.log.Errorw("handleGetProject", zap.Error(err))
 				return echo.ErrNotFound
 			}
 			return err
