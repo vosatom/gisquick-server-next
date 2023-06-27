@@ -91,13 +91,15 @@ func Serve() error {
 			APIHost         string        `conf:"default:0.0.0.0:3000"`
 		}
 		Postgres struct {
-			User         string `conf:"default:postgres"`
-			Password     string `conf:"default:postgres,mask"`
-			Host         string `conf:"default:postgres"`
-			Name         string `conf:"default:postgres,env:POSTGRES_DB"`
-			MaxIdleConns int    `conf:"default:3"`
-			MaxOpenConns int    `conf:"default:3"`
-			SSLMode      string `conf:"default:disable"`
+			User               string `conf:"default:postgres"`
+			Password           string `conf:"default:postgres,mask"`
+			Host               string `conf:"default:postgres"`
+			Name               string `conf:"default:postgres,env:POSTGRES_DB"`
+			Port               int    `conf:"default:5432`
+			MaxIdleConns       int    `conf:"default:3"`
+			MaxOpenConns       int    `conf:"default:3"`
+			SSLMode            string `conf:"default:disable"`
+			StatementCacheMode string `conf:"default:prepare"`
 		}
 		Redis struct {
 			Addr     string `conf:"default:redis:6379"` // "/var/run/redis/redis.sock"
@@ -145,13 +147,15 @@ func Serve() error {
 
 	// Database
 	dbConn, err := server.OpenDB(server.DBConfig{
-		User:         cfg.Postgres.User,
-		Password:     cfg.Postgres.Password,
-		Host:         cfg.Postgres.Host,
-		Name:         cfg.Postgres.Name,
-		MaxIdleConns: cfg.Postgres.MaxIdleConns,
-		MaxOpenConns: cfg.Postgres.MaxOpenConns,
-		SSLMode:      cfg.Postgres.SSLMode,
+		User:               cfg.Postgres.User,
+		Password:           cfg.Postgres.Password,
+		Host:               cfg.Postgres.Host,
+		Name:               cfg.Postgres.Name,
+		Port:               cfg.Postgres.Port,
+		MaxIdleConns:       cfg.Postgres.MaxIdleConns,
+		MaxOpenConns:       cfg.Postgres.MaxOpenConns,
+		SSLMode:            cfg.Postgres.SSLMode,
+		StatementCacheMode: cfg.Postgres.StatementCacheMode,
 	})
 	if err != nil {
 		return fmt.Errorf("connecting to db: %w", err)

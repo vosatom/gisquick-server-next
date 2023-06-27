@@ -17,11 +17,13 @@ import (
 func runMigrateCommand() error {
 	cfg := struct {
 		Postgres struct {
-			User     string `conf:"default:postgres"`
-			Password string `conf:"default:postgres,mask"`
-			Host     string `conf:"default:postgres"`
-			Name     string `conf:"default:postgres,env:POSTGRES_DB"`
-			SSLMode  string `conf:"default:prefer"`
+			User               string `conf:"default:postgres"`
+			Password           string `conf:"default:postgres,mask"`
+			Host               string `conf:"default:postgres"`
+			Name               string `conf:"default:postgres,env:POSTGRES_DB"`
+			Port               int    `conf:"default:5432"`
+			SSLMode            string `conf:"default:prefer"`
+			StatementCacheMode string `conf:"default:prepare"`
 		}
 		Args conf.Args
 	}{}
@@ -38,10 +40,11 @@ func runMigrateCommand() error {
 	q := make(url.Values)
 	q.Set("sslmode", cfg.Postgres.SSLMode)
 	q.Set("timezone", "utc")
+	q.Set("statement_cache_mode", cfg.Postgres.StatementCacheMode)
 	u := url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(cfg.Postgres.User, cfg.Postgres.Password),
-		Host:     cfg.Postgres.Host,
+		Host:     cfg.Postgres.Host + ":" + strconv.Itoa(cfg.Postgres.Port),
 		Path:     cfg.Postgres.Name,
 		RawQuery: q.Encode(),
 	}
