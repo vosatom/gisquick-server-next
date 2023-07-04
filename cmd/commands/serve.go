@@ -95,7 +95,7 @@ func Serve() error {
 			Password           string `conf:"default:postgres,mask"`
 			Host               string `conf:"default:postgres"`
 			Name               string `conf:"default:postgres,env:POSTGRES_DB"`
-			Port               int    `conf:"default:5432`
+			Port               int    `conf:"default:5432"`
 			MaxIdleConns       int    `conf:"default:3"`
 			MaxOpenConns       int    `conf:"default:3"`
 			SSLMode            string `conf:"default:disable"`
