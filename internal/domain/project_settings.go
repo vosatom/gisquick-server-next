@@ -71,4 +71,5 @@ type ProjectSettings struct {
 	TileResolutions []float64                `json:"tile_resolutions"`
 	Formatters      []json.RawMessage        `json:"formatters,omitempty"`
 	Proj4           map[string]string        `json:"proj4,omitempty"`
+	CustomProperties json.RawMessage          `json:"custom"`
 }

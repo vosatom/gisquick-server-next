@@ -737,6 +737,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["use_mapcache"] = settings.MapCache
 	data["zoom_extent"] = settings.InitialExtent
 	data["project_extent"] = settings.Extent
+	data["custom"] = settings.CustomProperties
 	data["scales"] = settings.Scales
 	data["tile_resolutions"] = settings.TileResolutions
 	data["map_tiling"] = settings.MapTiling
