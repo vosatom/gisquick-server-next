@@ -36,6 +36,7 @@ type SessionInfo struct {
 type SessionStore interface {
 	Set(ctx context.Context, sessionID, data string, expiration time.Duration) error
 	Get(ctx context.Context, sessionID string) (string, error)
+	Del(ctx context.Context, sessionID string) error
 }
 
 type RedisSessionStore struct {
@@ -54,7 +55,7 @@ func (s *RedisSessionStore) Set(ctx context.Context, sessionID, data string, exp
 }
 
 func (s *RedisSessionStore) Get(ctx context.Context, sessionID string) (string, error) {
-	val, err := s.rdb.Get(context.Background(), sessionID).Result()
+	val, err := s.rdb.Get(ctx, sessionID).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return "", ErrInvalidSession
@@ -62,6 +63,13 @@ func (s *RedisSessionStore) Get(ctx context.Context, sessionID string) (string, 
 		return "", fmt.Errorf("redis get session: %v", err)
 	}
 	return val, nil
+}
+
+func (s *RedisSessionStore) Del(ctx context.Context, sessionID string) error {
+	if err := s.rdb.Del(ctx, sessionID).Err(); err != nil {
+		return fmt.Errorf("redis delete session: %v", err)
+	}
+	return nil
 }
 
 type AuthService struct {
@@ -236,6 +244,12 @@ func (s *AuthService) LoginUser(c echo.Context, userAccount domain.Account) erro
 }
 
 func (s *AuthService) LogoutUser(c echo.Context) {
+	cookie, err := c.Request().Cookie("gq_session")
+	if err == nil {
+		if err = s.store.Del(c.Request().Context(), cookie.Value); err != nil {
+			s.logger.Errorw("deleting session on logout", zap.Error(err))
+		}
+	}
 	http.SetCookie(c.Response(), &http.Cookie{
 		Path:     "/",
 		SameSite: http.SameSiteLaxMode,
