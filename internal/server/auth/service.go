@@ -22,6 +22,7 @@ var (
 	ErrUserNotFound    = errors.New("User not found")
 	ErrInvalidPassword = errors.New("Password doesn't match")
 	ErrInvalidSession  = errors.New("Invalid session")
+	AnonymousUser      = domain.User{IsGuest: true}
 )
 
 const (
@@ -77,31 +78,31 @@ type AuthService struct {
 	expiration     time.Duration
 	accounts       domain.AccountsRepository
 	store          SessionStore
-	cache          *ttlcache.Cache[string, domain.Account]
-	basicAuthCache *ttlcache.Cache[string, domain.Account]
+	cache          *ttlcache.Cache[string, domain.User]
+	basicAuthCache *ttlcache.Cache[string, domain.User]
 }
 
 func NewAuthService(logger *zap.SugaredLogger, expiration time.Duration, accounts domain.AccountsRepository, store SessionStore) *AuthService {
-	loader := ttlcache.LoaderFunc[string, domain.Account](
-		func(c *ttlcache.Cache[string, domain.Account], username string) *ttlcache.Item[string, domain.Account] {
+	loader := ttlcache.LoaderFunc[string, domain.User](
+		func(c *ttlcache.Cache[string, domain.User], username string) *ttlcache.Item[string, domain.User] {
 			account, err := accounts.GetByUsername(username)
 			if err != nil {
 				logger.Errorw("getting account", "username", username, zap.Error(err))
 				return nil
 			}
-			item := c.Set(username, account, ttlcache.DefaultTTL)
+			item := c.Set(username, AccountToUser(account), ttlcache.DefaultTTL)
 			return item
 		},
 	)
 	cache := ttlcache.New(
-		ttlcache.WithTTL[string, domain.Account](45*time.Second),
-		ttlcache.WithLoader[string, domain.Account](loader),
-		ttlcache.WithDisableTouchOnHit[string, domain.Account](),
+		ttlcache.WithTTL[string, domain.User](45*time.Second),
+		ttlcache.WithLoader[string, domain.User](loader),
+		ttlcache.WithDisableTouchOnHit[string, domain.User](),
 	)
 
 	basicAuthCache := ttlcache.New(
-		ttlcache.WithTTL[string, domain.Account](45*time.Second),
-		ttlcache.WithDisableTouchOnHit[string, domain.Account](),
+		ttlcache.WithTTL[string, domain.User](45*time.Second),
+		ttlcache.WithDisableTouchOnHit[string, domain.User](),
 	)
 	return &AuthService{
 		logger:         logger,
@@ -142,54 +143,48 @@ func (s *AuthService) GetSessionInfo(c echo.Context) (*SessionInfo, error) {
 }
 
 func (s *AuthService) GetUser(c echo.Context) (domain.User, error) {
-	u, saved := c.Get("user").(domain.User)
+	user, saved := c.Get("user").(domain.User)
 	if saved {
-		return u, nil
+		return user, nil
 	}
 	auth := c.Request().Header.Get("Authorization")
 	if auth != "" {
-
 		if item := s.basicAuthCache.Get(auth); item != nil {
-			u = AccountToUser(item.Value())
-			log.Println("basic auth from cache", auth)
+			user = item.Value()
 		} else {
-			log.Println("decoding auth header", auth)
 			prefixLen := len(basic)
 			if len(auth) > prefixLen+1 && strings.EqualFold(auth[:prefixLen], basic) {
 				b, err := base64.StdEncoding.DecodeString(auth[prefixLen+1:])
 				if err != nil {
-					return domain.User{IsGuest: true}, err
+					return AnonymousUser, err
 				}
 				cred := strings.SplitN(string(b), ":", 2)
 				if len(cred) == 2 {
 					account, err := s.Authenticate(cred[0], cred[1])
 					if err != nil {
-						return domain.User{IsGuest: true}, err
+						return AnonymousUser, err
 					}
-					u = AccountToUser(account)
-					s.basicAuthCache.Set(auth, account, ttlcache.DefaultTTL)
+					user = AccountToUser(account)
+					s.basicAuthCache.Set(auth, user, ttlcache.DefaultTTL)
 				}
 			}
 		}
 	} else {
 		session, err := s.GetSessionInfo(c)
 		if err != nil {
-			return domain.User{IsGuest: true}, err
+			return AnonymousUser, fmt.Errorf("auth: get session user: %w", err)
 		}
 		if session == nil {
-			return domain.User{IsGuest: true}, nil
-		}
-		if err != nil {
-			return domain.User{IsGuest: true}, fmt.Errorf("auth: get session user: %w", err)
+			return AnonymousUser, nil
 		}
 		item := s.cache.Get(session.Username)
 		if item == nil {
-			return domain.User{IsGuest: true}, nil
+			return AnonymousUser, nil
 		}
-		u = AccountToUser(item.Value())
+		user = item.Value()
 	}
-	c.Set("user", u)
-	return u, nil
+	c.Set("user", user)
+	return user, nil
 }
 
 func (s *AuthService) Authenticate(login, password string) (domain.Account, error) {
