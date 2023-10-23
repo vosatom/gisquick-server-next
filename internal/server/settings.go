@@ -51,25 +51,47 @@ func (s *Server) handleGetProjectFiles() func(echo.Context) error {
 	}
 }
 
+type UserDashboard struct {
+	Projects []string `json:"projects"`
+}
+
 func (s *Server) handleGetProjects(c echo.Context) error {
+	var user domain.User
+	var projectsNames []string
 	projectsParam := c.Request().URL.Query().Get("projects")
 	if projectsParam != "" {
-		names := strings.Split(projectsParam, ",")
-		data := make([]domain.ProjectInfo, 0, len(names))
-		for _, name := range names {
+		projectsNames = strings.Split(projectsParam, ",")
+	} else {
+		var err error
+		user, err = s.auth.GetUser(c)
+		if err != nil {
+			return err
+		}
+		if !user.IsAuthenticated {
+			return echo.ErrUnauthorized
+		}
+		dashboardPath := filepath.Join(s.Config.ProjectsRoot, user.Username, "dashboard.json")
+		content, err := os.ReadFile(dashboardPath)
+		if err == nil {
+			var data UserDashboard
+			if err = json.Unmarshal(content, &data); err != nil {
+				s.log.Warnw("reading user dashboard file", "user", user.Username, zap.Error(err))
+			} else {
+				projectsNames = data.Projects
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			s.log.Warnw("reading user dashboard file", "user", user.Username, zap.Error(err))
+		}
+	}
+	if len(projectsNames) > 0 {
+		data := make([]domain.ProjectInfo, 0, len(projectsNames))
+		for _, name := range projectsNames {
 			p, err := s.projects.GetProjectInfo(strings.TrimSpace(name))
 			if err == nil {
 				data = append(data, p)
 			}
 		}
 		return c.JSON(http.StatusOK, data)
-	}
-	user, err := s.auth.GetUser(c)
-	if err != nil {
-		return err
-	}
-	if !user.IsAuthenticated {
-		return echo.ErrUnauthorized
 	}
 	data, err := s.projects.GetUserProjects(user.Username)
 	if err != nil {
