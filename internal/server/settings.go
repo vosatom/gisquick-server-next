@@ -767,8 +767,7 @@ func (s *Server) mediaFileHandler(cacheDir string) func(echo.Context) error {
 		projectName := c.Get("project").(string)
 		filePath := c.Param("*")
 		folder := filepath.Dir(filePath)
-
-		if !strings.HasPrefix(folder, "web/") {
+		if folder != "web" && !strings.HasPrefix(folder, "web/") {
 			return echo.ErrNotFound
 		}
 
