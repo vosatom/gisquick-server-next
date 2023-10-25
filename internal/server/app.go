@@ -1,14 +1,19 @@
 package server
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
-type App struct {
+type AppData struct {
 	Language         string `json:"lang"`
 	LandingProject   string `json:"landing_project,omitempty"`
 	PasswordResetUrl string `json:"reset_password_url,omitempty"`
@@ -22,9 +27,14 @@ type UserInfo struct {
 	Active    bool   `json:"active"`
 }
 
+type UserData struct {
+	domain.User
+	Profile map[string]interface{} `json:"profile,omitempty"`
+}
+
 type AppPayload struct {
-	App  App          `json:"app"`
-	User *domain.User `json:"user"`
+	App  AppData  `json:"app"`
+	User UserData `json:"user"`
 }
 
 func (s *Server) handleAppInit(c echo.Context) error {
@@ -33,18 +43,30 @@ func (s *Server) handleAppInit(c echo.Context) error {
 		return fmt.Errorf("handleAppInit get user: %w", err)
 	}
 	// userdtoUser()
-	app := App{
+	app := AppData{
 		Language:       s.Config.Language,
 		LandingProject: s.Config.LandingProject,
 	}
 	if s.accountsService.SupportEmails() {
 		app.PasswordResetUrl = "/api/accounts/password_reset"
 	}
-	data := AppPayload{App: app, User: &user}
+	var userProfile map[string]interface{}
+	if user.IsAuthenticated {
+		dashboardPath := filepath.Join(s.Config.ProjectsRoot, user.Username, "profile.json")
+		content, err := os.ReadFile(dashboardPath)
+		if err == nil {
+			if err = json.Unmarshal(content, &userProfile); err != nil {
+				s.log.Warnw("reading user profile file", "user", user.Username, zap.Error(err))
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			s.log.Warnw("reading user profile file", "user", user.Username, zap.Error(err))
+		}
+	}
+	data := AppPayload{App: app, User: UserData{User: user, Profile: userProfile}}
 	return c.JSON(http.StatusOK, data)
 }
 
-type UserData struct {
+type SessionData struct {
 	User domain.User `json:"user"`
 }
 
@@ -53,7 +75,7 @@ func (s *Server) handleGetSessionUser(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, UserData{user})
+	return c.JSON(http.StatusOK, SessionData{user})
 }
 
 func (s *Server) handleGetUsers(c echo.Context) error {
