@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -207,22 +206,26 @@ func (s *AuthService) Authenticate(login, password string) (domain.Account, erro
 	return account, nil
 }
 
-func (s *AuthService) LoginUser(c echo.Context, userAccount domain.Account) error {
+func (s *AuthService) LoginUserWithExpiration(c echo.Context, userAccount domain.Account, expiration time.Duration) error {
 	token, err := uuid.NewV4()
 	if err != nil {
 		return err
 	}
 	sessionid := token.String()
 	// sessionid := fmt.Sprintf("%s:%s", user.Username, token.String())
-	if err := s.store.Set(c.Request().Context(), sessionid, userAccount.Username, s.expiration); err != nil {
+	if err := s.store.Set(c.Request().Context(), sessionid, userAccount.Username, expiration); err != nil {
 		return fmt.Errorf("save session: %v", err)
 	}
-
+	oldCookie, err := c.Request().Cookie("gq_session")
+	if err == nil {
+		if err = s.store.Del(c.Request().Context(), oldCookie.Value); err != nil {
+			s.logger.Errorw("deleting old session on login", zap.Error(err))
+		}
+	}
 	now := time.Now().UTC()
 	userAccount.LastLogin = &now
 	if err := s.accounts.Update(userAccount); err != nil {
-		// not a critical issue, just log error and continue
-		log.Println("update user.last_login: %w", err) // TODO: proper logger
+		s.logger.Warnw("updating time of last login", zap.Error(err))
 	}
 
 	// serverUrl.Hostname()
@@ -233,9 +236,13 @@ func (s *AuthService) LoginUser(c echo.Context, userAccount domain.Account) erro
 		Name:     "gq_session",
 		Value:    sessionid,
 		HttpOnly: true,
-		Expires:  time.Now().Add(s.expiration),
+		Expires:  time.Now().Add(expiration),
 	})
 	return nil
+}
+
+func (s *AuthService) LoginUser(c echo.Context, userAccount domain.Account) error {
+	return s.LoginUserWithExpiration(c, userAccount, s.expiration)
 }
 
 func (s *AuthService) LogoutUser(c echo.Context) {
