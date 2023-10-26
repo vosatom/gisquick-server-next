@@ -36,6 +36,8 @@ type Config struct {
 	ProjectCustomization bool
 }
 
+var extensions = make(map[string]func(s *Server) error, 0)
+
 type Server struct {
 	Config Config
 	echo   *echo.Echo
@@ -140,4 +142,12 @@ func (s *Server) ListenAndServe(addr string) error {
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.projects.Close()
 	return s.echo.Shutdown(ctx)
+}
+
+func (s *Server) AddExtension(name string) error {
+	extension, registred := extensions[name]
+	if !registred {
+		return fmt.Errorf("unknown server extension: %s", name)
+	}
+	return extension(s)
 }
