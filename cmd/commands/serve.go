@@ -76,6 +76,7 @@ func Serve() error {
 			AccountLimiterConfig string
 			LandingProject       string
 			ProjectCustomization bool
+			Extensions           string
 		}
 		Auth struct {
 			SessionExpiration    time.Duration `conf:"default:24h"`
@@ -242,6 +243,13 @@ func Serve() error {
 
 	sws := ws.NewSettingsWS(log)
 	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws, limiter, notifications)
+
+	extensionsList := strings.Split(cfg.Gisquick.Extensions, ",")
+	for _, e := range extensionsList {
+		if err := s.AddExtension(e); err != nil {
+			log.Errorw("adding server extension", "name", e, zap.Error(err))
+		}
+	}
 
 	// Start server
 	go func() {
