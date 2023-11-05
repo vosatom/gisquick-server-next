@@ -6,6 +6,7 @@ import (
 	"github.com/gisquick/gisquick-server/internal/server/auth"
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 func (s *Server) handleLogin() func(echo.Context) error {
@@ -22,14 +23,20 @@ func (s *Server) handleLogin() func(echo.Context) error {
 		if err := validate.Struct(form); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-		user, err := s.auth.Authenticate(form.Username, form.Password)
+		account, err := s.auth.Authenticate(form.Username, form.Password)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusUnauthorized, "Please provide valid credentials")
 		}
-		if err := s.auth.LoginUser(c, user); err != nil {
+		if err := s.auth.LoginUser(c, account); err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, auth.AccountToUser(user))
+		user := auth.AccountToUser(account)
+		profile, err := s.getUserProfile(user)
+		if err != nil {
+			s.log.Warnw("handleLogin", "user", user.Username, zap.Error(err))
+		}
+		userData := UserData{User: user, Profile: profile}
+		return c.JSON(http.StatusOK, userData)
 	}
 }
 

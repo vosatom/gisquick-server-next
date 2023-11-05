@@ -37,6 +37,22 @@ type AppPayload struct {
 	User UserData `json:"user"`
 }
 
+func (s *Server) getUserProfile(user domain.User) (map[string]interface{}, error) {
+	var userProfile map[string]interface{}
+	if user.IsAuthenticated {
+		dashboardPath := filepath.Join(s.Config.ProjectsRoot, user.Username, "profile.json")
+		content, err := os.ReadFile(dashboardPath)
+		if err == nil {
+			if err = json.Unmarshal(content, &userProfile); err != nil {
+				return nil, fmt.Errorf("parsing user profile file: %w", err)
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("reading user profile file: %w", err)
+		}
+	}
+	return userProfile, nil
+}
+
 func (s *Server) handleAppInit(c echo.Context) error {
 	user, err := s.auth.GetUser(c)
 	if err != nil {
@@ -50,17 +66,9 @@ func (s *Server) handleAppInit(c echo.Context) error {
 	if s.accountsService.SupportEmails() {
 		app.PasswordResetUrl = "/api/accounts/password_reset"
 	}
-	var userProfile map[string]interface{}
-	if user.IsAuthenticated {
-		dashboardPath := filepath.Join(s.Config.ProjectsRoot, user.Username, "profile.json")
-		content, err := os.ReadFile(dashboardPath)
-		if err == nil {
-			if err = json.Unmarshal(content, &userProfile); err != nil {
-				s.log.Warnw("reading user profile file", "user", user.Username, zap.Error(err))
-			}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			s.log.Warnw("reading user profile file", "user", user.Username, zap.Error(err))
-		}
+	userProfile, err := s.getUserProfile(user)
+	if err != nil {
+		s.log.Warnw("handleAppInit", "user", user.Username, zap.Error(err))
 	}
 	data := AppPayload{App: app, User: UserData{User: user, Profile: userProfile}}
 	return c.JSON(http.StatusOK, data)
