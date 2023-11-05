@@ -244,7 +244,7 @@ func (s *DiskStorage) Create(fullName string, meta json.RawMessage) (*domain.Pro
 	if s.CheckProjectExists(fullName) {
 		return nil, domain.ErrProjectAlreadyExists
 	}
-	if err := os.MkdirAll(internalDir, 0777); err != nil {
+	if err := os.MkdirAll(internalDir, 0775); err != nil {
 		return nil, err
 	}
 
@@ -563,7 +563,7 @@ func (s *DiskStorage) Delete(name string) error {
 }
 
 func saveToFile(src io.Reader, filename string) (err error) {
-	err = os.MkdirAll(filepath.Dir(filename), 0777)
+	err = os.MkdirAll(filepath.Dir(filename), 0775)
 	if err != nil {
 		return err
 	}
@@ -586,7 +586,7 @@ func saveToFile(src io.Reader, filename string) (err error) {
 }
 
 func saveToFile2(src io.Reader, filename string) (h string, err error) {
-	err = os.MkdirAll(filepath.Dir(filename), 0777)
+	err = os.MkdirAll(filepath.Dir(filename), 0775)
 	if err != nil {
 		return
 	}
@@ -622,7 +622,7 @@ func (s *DiskStorage) CreateFile(projectName, directory, pattern string, r io.Re
 		return
 	}
 	destDir := filepath.Join(s.ProjectsRoot, projectName, directory)
-	err = os.MkdirAll(destDir, 0777)
+	err = os.MkdirAll(destDir, 0775)
 	if err != nil {
 		err = fmt.Errorf("creating directory: %w", err)
 		return
@@ -656,9 +656,6 @@ func (s *DiskStorage) CreateFile(projectName, directory, pattern string, r io.Re
 			os.Remove(f.Name())
 		}
 	}()
-	if err = f.Chmod(0644); err != nil {
-		return
-	}
 	sha := sha1.New()
 	dest := io.MultiWriter(f, sha)
 	if _, err = io.Copy(dest, r); err != nil {
@@ -703,7 +700,7 @@ func (s *DiskStorage) CreateFile(projectName, directory, pattern string, r io.Re
 
 func (s *DiskStorage) SaveFile(project string, finfo domain.ProjectFile, path string) error {
 	absPath := filepath.Join(s.ProjectsRoot, project, path)
-	if err := os.MkdirAll(filepath.Dir(absPath), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(absPath), 0775); err != nil {
 		return err
 	}
 	if err := os.Rename(finfo.Path, absPath); err != nil {
