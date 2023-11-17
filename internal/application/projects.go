@@ -46,6 +46,7 @@ type ProjectService interface {
 	UpdateScripts(projectName string, scripts domain.Scripts) error
 	RemoveScripts(projectName string, modules ...string) (domain.Scripts, error)
 
+	GetProjectCustomizations(projectName string) (json.RawMessage, error)
 	Close()
 }
 
@@ -526,6 +527,10 @@ func GetTableFields(lm domain.LayerMeta, ls domain.LayerSettings) domain.StringA
 	return fields
 }
 
+func (s *projectService) GetProjectCustomizations(projectName string) (json.RawMessage, error) {
+	return s.repo.GetProjectCustomizations(projectName)
+}
+
 func (s *projectService) GetMapConfig(projectName string, user domain.User) (map[string]interface{}, error) {
 	var meta domain.QgisMeta
 	if err := s.repo.ParseQgisMetadata(projectName, &meta); err != nil {
@@ -750,10 +755,12 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		data["scripts"] = scripts
 	}
 	if settings.Title != "" {
-		data["root_title"] = settings.Title
+		data["title"] = settings.Title
 	} else {
-		data["root_title"] = meta.Title
+		data["title"] = meta.Title
 	}
+	// temporary backward compatibility
+	data["root_title"] = data["title"]
 
 	data["name"] = projectName
 	data["ows_url"] = fmt.Sprintf("/api/map/ows/%s", projectName)
@@ -786,13 +793,6 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		}
 	}
 	data["topics"] = topics
-	cfg, err := s.repo.GetProjectCustomizations(projectName)
-	if err != nil {
-		s.log.Errorw("reading project customization config", zap.Error(err))
-	}
-	if cfg != nil {
-		data["app"] = cfg
-	}
 	return data, nil
 }
 

@@ -794,7 +794,7 @@ func (s *Server) mediaFileHandler(cacheDir string) func(echo.Context) error {
 		}
 
 		absPath := filepath.Join(s.Config.ProjectsRoot, projectName, filePath)
-		if strings.EqualFold(c.Request().URL.Query().Get("thumbnail"), "true") {
+		if cacheDir != "" && strings.EqualFold(c.Request().URL.Query().Get("thumbnail"), "true") {
 			key := filepath.Join(projectName, filePath)
 			val, err, _ := lock.Do(key, func() (interface{}, error) {
 				srcFinfo, err := os.Stat(absPath)
@@ -846,6 +846,15 @@ func (s *Server) mediaFileHandler(cacheDir string) func(echo.Context) error {
 		// c.Response().Header().Set("Cache-Control", "private, must-revalidate")
 		return c.File(absPath)
 	}
+}
+
+func (s *Server) appMediaFileHandler(c echo.Context) error {
+	username := c.Param("user")
+	name := c.Param("name")
+	projectName := filepath.Join(username, name)
+	filePath := c.Param("*")
+	absPath := filepath.Join(s.Config.ProjectsRoot, projectName, "web", "app", filePath)
+	return c.File(absPath)
 }
 
 type MediaFile struct {

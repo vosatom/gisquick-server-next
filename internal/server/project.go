@@ -49,8 +49,13 @@ func (s *Server) handleGetProject() func(c echo.Context) error {
 		if err != nil {
 			return err
 		}
-		if !s.Config.ProjectCustomization {
-			delete(data, "app")
+		if s.Config.ProjectCustomization {
+			cfg, err := s.projects.GetProjectCustomizations(projectName)
+			if err != nil {
+				s.log.Errorw("reading project customization config", zap.Error(err))
+			} else if cfg != nil {
+				data["app"] = cfg
+			}
 		}
 		notifications, err := s.notifications.GetMapProjectNotifications(projectName, user)
 		if err != nil {

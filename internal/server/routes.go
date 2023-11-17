@@ -1,7 +1,13 @@
 package server
 
 import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 func (s *Server) AddRoutes(e *echo.Echo) {
@@ -63,6 +69,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.GET("/api/project/full-info/:user/:name", s.handleGetProjectFullInfo(), ProjectAdminAccess)
 
 	e.GET("/api/project/media/:user/:name/*", s.mediaFileHandler("/tmp/thumbnails"), ProjectAccess)
+	e.GET("/api/project/media/:user/:name/web/app/*", s.appMediaFileHandler)
 	e.POST("/api/project/media/:user/:name/*", s.handleUploadMediaFile, ProjectAccess)
 	e.DELETE("/api/project/media/:user/:name/*", s.handleDeleteMediaFile, ProjectAccess)
 	e.POST("/api/project/script/:user/:name", s.handleScriptUpload(), ProjectAdminAccess)
@@ -78,7 +85,42 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.POST("/api/project/settings/:user/:name", s.handleSaveProjectSettings, ProjectAdminAccess)
 	e.POST("/api/project/thumbnail/:user/:name", s.handleUploadThumbnail, ProjectAdminAccess)
 	e.GET("/api/project/thumbnail/:user/:name", s.handleGetThumbnail)
-	e.GET("/api/map/project/:user/:name", s.handleGetProject(), ProjectAccess)
+	e.GET("/api/map/project/:user/:name", s.handleGetProject(), MiddlewareErrorHandler(ProjectAccess, func(e error, c echo.Context) error {
+		if he, ok := e.(*echo.HTTPError); ok {
+			if he.Code == 401 {
+				projectName := c.Get("project").(string)
+				pInfo, err := s.projects.GetProjectInfo(projectName)
+				if err != nil {
+					if errors.Is(err, domain.ErrProjectNotExists) {
+						return echo.NewHTTPError(http.StatusBadRequest, "Project does not exists")
+					}
+					s.log.Errorw("reading project info", zap.Error(err))
+				}
+				type app struct {
+					App    json.RawMessage `json:"app"`
+					Status int             `json:"status"`
+					Name   string          `json:"name"`
+					Title  string          `json:"title"`
+				}
+				data := app{
+					Name:   projectName,
+					Title:  pInfo.Title,
+					Status: he.Code,
+				}
+				if s.Config.ProjectCustomization {
+					cfg, err := s.projects.GetProjectCustomizations(projectName)
+					if err != nil {
+						s.log.Errorw("reading project customization config", zap.Error(err))
+					} else if cfg != nil {
+						data.App = cfg
+					}
+				}
+				return c.JSON(he.Code, data)
+			}
+		}
+		return e
+	}))
+
 	owsHandler := s.handleMapOws()
 	e.GET("/api/map/ows/:user/:name", owsHandler, ProjectAccessOWS)
 	e.POST("/api/map/ows/:user/:name", owsHandler, ProjectAccessOWS)

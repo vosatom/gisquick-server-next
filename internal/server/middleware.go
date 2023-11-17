@@ -67,6 +67,17 @@ func ProjectAdminAccessMiddleware(a *auth.AuthService) echo.MiddlewareFunc {
 	}
 }
 
+func MiddlewareErrorHandler(middleware echo.MiddlewareFunc, cb func(e error, c echo.Context) error) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if err := middleware(next)(c); err != nil {
+				return cb(err, c)
+			}
+			return nil
+		}
+	}
+}
+
 func ProjectAccessMiddleware(a *auth.AuthService, ps application.ProjectService, basicAuthRealm string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
