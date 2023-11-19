@@ -84,10 +84,12 @@ func (fi *FilesIndex) TotalSize() int64 {
 }
 
 type DiskStorage struct {
-	ProjectsRoot string
-	log          *zap.SugaredLogger
-	indexCache   *ttlcache.Cache[string, *FilesIndex]
-	configCache  *cache.DataCache[string, json.RawMessage]
+	ProjectsRoot      string
+	log               *zap.SugaredLogger
+	indexCache        *ttlcache.Cache[string, *FilesIndex]
+	configCache       *cache.DataCache[string, json.RawMessage]
+	projectInfoReader JsonFilesReader[domain.ProjectInfo]
+	settingsReader    JsonFilesReader[domain.ProjectSettings]
 }
 
 type Info struct {
@@ -140,6 +142,11 @@ func Checksum(path string) (string, error) {
 		return "dbhash:" + dbhash, err
 	}
 	return Sha1(path)
+}
+
+type JsonFilesReader[T any] interface {
+	Get(filename string) (T, error)
+	Close()
 }
 
 var excludeExtRegex = regexp.MustCompile(`(?i).*\.(gpkg-wal|gpkg-shm)$`)
@@ -214,6 +221,8 @@ func NewDiskStorage(log *zap.SugaredLogger, projectsRoot string) *DiskStorage {
 		}
 	})
 	go indexCache.Start()
+	ds.settingsReader = cache.NewJSONFileReader[domain.ProjectSettings](time.Hour)
+	ds.projectInfoReader = cache.NewJSONFileReader[domain.ProjectInfo](time.Hour)
 	return ds
 }
 
@@ -296,36 +305,10 @@ func (s *DiskStorage) CheckProjectExists(name string) bool {
 }
 
 func (s *DiskStorage) GetProjectInfo(name string) (domain.ProjectInfo, error) {
-	var pInfo domain.ProjectInfo
 	projPath := filepath.Join(s.ProjectsRoot, name, ".gisquick", "project.json")
-
-	// ver. 1
-	/*
-		f, err := os.Open(projPath)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return pInfo, domain.ErrProjectNotExists
-			}
-		}
-		defer f.Close()
-		decoder := json.NewDecoder(f)
-		if err := decoder.Decode(&pInfo); err != nil {
-			s.log.Errorw("parsing project file", zap.Error(err))
-			return pInfo, fmt.Errorf("reading project file: %w", err)
-		}
-	*/
-	// ver. 2
-	content, err := ioutil.ReadFile(projPath)
+	pInfo, err := s.projectInfoReader.Get(projPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return pInfo, domain.ErrProjectNotExists
-		}
-		return pInfo, fmt.Errorf("reading project file: %w", err)
-	}
-	err = json.Unmarshal(content, &pInfo)
-	if err != nil {
-		s.log.Errorw("parsing project file", zap.Error(err))
-		return pInfo, fmt.Errorf("reading project file: %w", err)
+		return domain.ProjectInfo{}, err
 	}
 	pInfo.Name = name
 	return pInfo, nil
@@ -965,13 +948,11 @@ func (s *DiskStorage) UpdateSettings(projectName string, data json.RawMessage) e
 
 func (s *DiskStorage) GetSettings(projectName string) (domain.ProjectSettings, error) {
 	var settings domain.ProjectSettings
-	content, err := os.ReadFile(s.GetSettingsPath(projectName))
+	data, err := s.settingsReader.Get(s.GetSettingsPath(projectName))
 	if err != nil {
 		return settings, err
 	}
-	err = json.Unmarshal(content, &settings)
-	// err = jsoniter.Unmarshal(content, &settings)
-	return settings, err
+	return data, nil
 }
 
 func (s *DiskStorage) ParseQgisMetadata(projectName string, data interface{}) error {
@@ -1026,6 +1007,8 @@ func (s *DiskStorage) UpdateScripts(projectName string, scripts domain.Scripts) 
 }
 
 func (s *DiskStorage) Close() {
+	s.settingsReader.Close()
+	s.projectInfoReader.Close()
 	s.indexCache.Stop()
 	s.indexCache.DeleteAll()
 }
