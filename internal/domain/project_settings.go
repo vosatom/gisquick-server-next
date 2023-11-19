@@ -59,7 +59,6 @@ type Authentication struct {
 
 type ProjectSettings struct {
 	Auth            Authentication           `json:"auth"` // or access?
-	Users           []string                 `json:"users,omitempty"`
 	BaseLayers      []string                 `json:"base_layers"`
 	Layers          map[string]LayerSettings `json:"layers"`
 	Title           string                   `json:"title"`
