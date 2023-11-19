@@ -207,6 +207,7 @@ type FilesReader func() (string, io.ReadCloser, error)
 type ProjectsRepository interface {
 	CheckProjectExists(name string) bool
 	Create(name string, qmeta json.RawMessage) (*ProjectInfo, error)
+	AllProjects(skipErrors bool) ([]string, error)
 	UserProjects(user string) ([]string, error) // or should it require User object?
 	GetProjectInfo(name string) (ProjectInfo, error)
 	Delete(name string) error

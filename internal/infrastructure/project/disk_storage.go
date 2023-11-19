@@ -299,6 +299,32 @@ func (s *DiskStorage) UserProjects(username string) ([]string, error) {
 	return projectsNames, nil
 }
 
+func (s *DiskStorage) AllProjects(skipErrors bool) ([]string, error) {
+	projectsNames := make([]string, 0)
+	entries, err := os.ReadDir(s.ProjectsRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+			return projectsNames, nil
+		}
+		return projectsNames, fmt.Errorf("listing projects: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			username := entry.Name()
+			userProjects, err := s.UserProjects(username)
+			if err != nil {
+				s.log.Errorw("listing projects", "user", username, zap.Error(err))
+				if !skipErrors {
+					return userProjects, fmt.Errorf("listing projects: %v", err)
+				}
+			} else {
+				projectsNames = append(projectsNames, userProjects...)
+			}
+		}
+	}
+	return projectsNames, nil
+}
+
 func (s *DiskStorage) CheckProjectExists(name string) bool {
 	projPath := filepath.Join(s.ProjectsRoot, name, ".gisquick", "project.json")
 	return fileExists(projPath)

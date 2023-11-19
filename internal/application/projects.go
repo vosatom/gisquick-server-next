@@ -23,6 +23,7 @@ type ProjectService interface {
 	Delete(projectName string) error
 	GetProjectInfo(projectName string) (domain.ProjectInfo, error)
 	GetUserProjects(username string) ([]domain.ProjectInfo, error)
+	AccessibleProjects(username string, skipErrors bool) ([]domain.ProjectInfo, error)
 	// SaveFile(projectName, filename string, r io.Reader) (string, error)
 	SaveFile(projectName, dir, pattern string, r io.Reader, size int64) (domain.ProjectFile, error)
 	DeleteFile(projectName, path string) error
@@ -794,6 +795,39 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	}
 	data["topics"] = topics
 	return data, nil
+}
+
+func (s *projectService) AccessibleProjects(username string, skipErrors bool) ([]domain.ProjectInfo, error) {
+	projects := make([]domain.ProjectInfo, 0)
+	list, err := s.repo.AllProjects(skipErrors)
+	if err != nil {
+		return projects, err
+	}
+	for _, projectName := range list {
+		pi, err := s.repo.GetProjectInfo(projectName)
+		if err != nil {
+			s.log.Errorw("getting project info", "project", projectName, zap.Error(err))
+			if !skipErrors {
+				return nil, err
+			}
+		} else {
+			if pi.Authentication == "public" || pi.Authentication == "authenticated" {
+				projects = append(projects, pi)
+			} else if pi.Authentication == "users" {
+				settings, err := s.repo.GetSettings(projectName)
+				if err != nil {
+					s.log.Errorw("getting project settings", "project", projectName, zap.Error(err))
+					if !skipErrors {
+						return nil, err
+					}
+				}
+				if domain.StringArray(settings.Auth.Users).Has(username) {
+					projects = append(projects, pi)
+				}
+			}
+		}
+	}
+	return projects, nil
 }
 
 func (s *projectService) Close() {

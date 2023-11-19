@@ -55,49 +55,65 @@ type UserDashboard struct {
 	Projects []string `json:"projects"`
 }
 
-func (s *Server) handleGetProjects(c echo.Context) error {
-	var user domain.User
-	var projectsNames []string
-	projectsParam := c.Request().URL.Query().Get("projects")
-	if projectsParam != "" {
-		projectsNames = strings.Split(projectsParam, ",")
-	} else {
-		var err error
-		user, err = s.auth.GetUser(c)
+func (s *Server) handleGetProjects() func(echo.Context) error {
+	type QueryParams struct {
+		Projects string `query:"projects"`
+		Filter   string `query:"filter"`
+	}
+	return func(c echo.Context) error {
+		var user domain.User
+		var projectsNames []string
+		queryParams := new(QueryParams)
+		if err := (&echo.DefaultBinder{}).BindQueryParams(c, queryParams); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid query parameters")
+		}
+		if queryParams.Projects != "" {
+			projectsNames = strings.Split(queryParams.Projects, ",")
+		} else {
+			var err error
+			user, err = s.auth.GetUser(c)
+			if err != nil {
+				return err
+			}
+			if !user.IsAuthenticated {
+				return echo.ErrUnauthorized
+			}
+			dashboardPath := filepath.Join(s.Config.ProjectsRoot, user.Username, "dashboard.json")
+			content, err := os.ReadFile(dashboardPath)
+			if err == nil {
+				var data UserDashboard
+				if err = json.Unmarshal(content, &data); err != nil {
+					s.log.Warnw("reading user dashboard file", "user", user.Username, zap.Error(err))
+				} else {
+					projectsNames = data.Projects
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				s.log.Warnw("reading user dashboard file", "user", user.Username, zap.Error(err))
+			}
+		}
+		if len(projectsNames) > 0 {
+			data := make([]domain.ProjectInfo, 0, len(projectsNames))
+			for _, name := range projectsNames {
+				p, err := s.projects.GetProjectInfo(strings.TrimSpace(name))
+				if err == nil {
+					data = append(data, p)
+				}
+			}
+			return c.JSON(http.StatusOK, data)
+		}
+		if strings.EqualFold(queryParams.Filter, "accessible") {
+			data, err := s.projects.AccessibleProjects(user.Username, true)
+			if err != nil {
+				return fmt.Errorf("getting list of user accessible projects: %w", err)
+			}
+			return c.JSON(http.StatusOK, data)
+		}
+		data, err := s.projects.GetUserProjects(user.Username)
 		if err != nil {
 			return err
 		}
-		if !user.IsAuthenticated {
-			return echo.ErrUnauthorized
-		}
-		dashboardPath := filepath.Join(s.Config.ProjectsRoot, user.Username, "dashboard.json")
-		content, err := os.ReadFile(dashboardPath)
-		if err == nil {
-			var data UserDashboard
-			if err = json.Unmarshal(content, &data); err != nil {
-				s.log.Warnw("reading user dashboard file", "user", user.Username, zap.Error(err))
-			} else {
-				projectsNames = data.Projects
-			}
-		} else if !errors.Is(err, os.ErrNotExist) {
-			s.log.Warnw("reading user dashboard file", "user", user.Username, zap.Error(err))
-		}
-	}
-	if len(projectsNames) > 0 {
-		data := make([]domain.ProjectInfo, 0, len(projectsNames))
-		for _, name := range projectsNames {
-			p, err := s.projects.GetProjectInfo(strings.TrimSpace(name))
-			if err == nil {
-				data = append(data, p)
-			}
-		}
 		return c.JSON(http.StatusOK, data)
 	}
-	data, err := s.projects.GetUserProjects(user.Username)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, data)
 }
 
 func (s *Server) handleGetUserProjects(c echo.Context) error {
