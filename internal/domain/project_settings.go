@@ -58,16 +58,17 @@ type Authentication struct {
 }
 
 type ProjectSettings struct {
-	Auth            Authentication           `json:"auth"` // or access?
-	BaseLayers      []string                 `json:"base_layers"`
-	Layers          map[string]LayerSettings `json:"layers"`
-	Title           string                   `json:"title"`
-	MapCache        bool                     `json:"use_mapcache"`
-	Topics          []Topic                  `json:"topics"`
-	Extent          []float64                `json:"extent"`
-	InitialExtent   []float64                `json:"initial_extent"`
-	Scales          json.RawMessage          `json:"scales"`
-	TileResolutions []float64                `json:"tile_resolutions"`
-	Formatters      []json.RawMessage        `json:"formatters,omitempty"`
-	Proj4           map[string]string        `json:"proj4,omitempty"`
+	Auth            Authentication                 `json:"auth"` // or access?
+	BaseLayers      []string                       `json:"base_layers"`
+	Layers          map[string]LayerSettings       `json:"layers"`
+	Title           string                         `json:"title"`
+	MapCache        bool                           `json:"use_mapcache"`
+	Topics          []Topic                        `json:"topics"`
+	Extent          []float64                      `json:"extent"`
+	InitialExtent   []float64                      `json:"initial_extent"`
+	Scales          json.RawMessage                `json:"scales"`
+	TileResolutions []float64                      `json:"tile_resolutions"`
+	Formatters      []json.RawMessage              `json:"formatters,omitempty"`
+	Proj4           map[string]string              `json:"proj4,omitempty"`
+	Bookmarks       map[string]map[string]Bookmark `json:"bookmarks"`
 }

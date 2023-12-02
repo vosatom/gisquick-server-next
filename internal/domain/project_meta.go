@@ -61,22 +61,31 @@ type LayerAttribute struct {
 	Format     string                 `json:"format,omitempty"`
 }
 
+type BookmarkMeta struct {
+	Id       string    `json:"id"`
+	Name     string    `json:"name"`
+	Extent   []float64 `json:"extent"`
+	Rotation float64   `json:"rotation"`
+	Group    string    `json:"group"`
+}
+
 type QgisMeta struct {
 	File   string    `json:"file"`
 	Title  string    `json:"title"`
 	Extent []float64 `json:"extent"`
 	Scales []float64 `json:"scales"`
-	// LayersTree        []TreeNode             `json:"layers_tree"`
-	LayersTree        []interface{}          `json:"layers_tree"`
-	LayersOrder       []string               `json:"layers_order"`
-	BaseLayers        []string               `json:"base_layers"`
-	Layers            map[string]LayerMeta   `json:"layers"`
-	Projection        string                 `json:"projection"`
-	Projections       map[string]*Projection `json:"projections"`
-	Units             map[string]interface{} `json:"units"`
-	ComposerTemplates []interface{}          `json:"composer_templates"`
-	Client            map[string]interface{} `json:"client_info"`
-	ProjectHash       string                 `json:"project_hash"`
+	// LayersTree        []TreeNode                      `json:"layers_tree"`
+	LayersTree        []interface{}                      `json:"layers_tree"`
+	LayersOrder       []string                           `json:"layers_order"`
+	BaseLayers        []string                           `json:"base_layers"`
+	Layers            map[string]LayerMeta               `json:"layers"`
+	Projection        string                             `json:"projection"`
+	Projections       map[string]*Projection             `json:"projections"`
+	Units             map[string]interface{}             `json:"units"`
+	ComposerTemplates []interface{}                      `json:"composer_templates"`
+	Client            map[string]interface{}             `json:"client_info"`
+	ProjectHash       string                             `json:"project_hash"`
+	Bookmarks         map[string]map[string]BookmarkMeta `json:"bookmarks"`
 }
 
 type TreeNode interface {
