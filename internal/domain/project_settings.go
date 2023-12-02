@@ -108,5 +108,6 @@ type ProjectSettings struct {
 	Proj4            map[string]string        `json:"proj4,omitempty"`
 	Storage          []StorageProvider        `json:"storage"`
 	Services         Services                 `json:"services"`
+	Language         string                   `json:"lang"`
 	CustomProperties json.RawMessage          `json:"custom"`
 }
