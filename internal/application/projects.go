@@ -529,6 +529,31 @@ func GetTableFields(lm domain.LayerMeta, ls domain.LayerSettings) domain.StringA
 	return fields
 }
 
+func GetBookmarks(meta domain.QgisMeta, settings domain.ProjectSettings) (map[string]map[string]interface{}) {
+	bookmarks := make(map[string]map[string]interface{})
+	for groupName, group := range meta.Bookmarks {
+		bookmarks[groupName] = make(map[string]interface{})
+		groupSettings, groupHasSettings := settings.Bookmarks[groupName]
+		for id, bookmark := range group {
+			transformedBookmark := make(map[string]interface{})
+			transformedBookmark["id"] = bookmark.Id
+			transformedBookmark["name"] = bookmark.Name
+			transformedBookmark["extent"] = bookmark.Extent
+			transformedBookmark["rotation"] = bookmark.Rotation
+			transformedBookmark["group"] = bookmark.Group
+
+			if groupHasSettings {
+				bookmarkSettings, bookmarkHasSettings := groupSettings[id]
+				if bookmarkHasSettings && bookmarkSettings.Content != "" {
+					transformedBookmark["content"] = bookmarkSettings.Content
+				}
+			}
+			bookmarks[groupName][id] = transformedBookmark
+		}
+	}
+	return bookmarks
+}
+
 func (s *projectService) GetProjectCustomizations(projectName string) (json.RawMessage, error) {
 	return s.repo.GetProjectCustomizations(projectName)
 }
@@ -780,6 +805,8 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["ows_url"] = fmt.Sprintf("/api/map/ows/%s", projectName)
 	data["ows_project"] = projectName
 	data["lang"] = settings.Language
+	data["bookmarks"] = GetBookmarks(meta, settings)
+
 	var storage []map[string]interface{}
 	for _, service := range settings.Storage {
 		filteredService := make(map[string]interface{})

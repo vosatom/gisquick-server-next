@@ -91,9 +91,15 @@ type Services struct {
 	Features  map[string]ServiceFeature  `json:"features"`
 }
 
+type Bookmark struct {
+	ID string `json:"id"`
+	Content string `json:"content"`
+}
+
 type ProjectSettings struct {
 	MapTiling        bool                     `json:"map_tiling"`
 	Auth             Authentication           `json:"auth"` // or access?
+	Users            []string                 `json:"users,omitempty"`
 	BaseLayers       []string                 `json:"base_layers"`
 	Layers           map[string]LayerSettings `json:"layers"`
 	Title            string                   `json:"title"`
@@ -110,4 +116,5 @@ type ProjectSettings struct {
 	Services         Services                 `json:"services"`
 	Language         string                   `json:"lang"`
 	CustomProperties json.RawMessage          `json:"custom"`
+	Bookmarks        map[string]map[string]Bookmark `json:"bookmarks"`
 }
