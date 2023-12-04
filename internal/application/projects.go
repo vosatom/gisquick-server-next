@@ -394,6 +394,7 @@ type OverlayLayer struct {
 	ExportFields         []string                   `json:"export_fields,omitempty"`
 	CustomProperties     json.RawMessage            `json:"custom,omitempty"`
 	Relations            json.RawMessage            `json:"relations,omitempty"`
+	Provider             string                     `json:"provider_type,omitempty"`
 	SourceParams         map[string]json.RawMessage `json:"source,omitempty"`
 }
 
@@ -668,6 +669,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 			}
 
 			if lmeta.Type == "RasterLayer" && lmeta.Provider == "wms" {
+				ldata.Provider = lmeta.Provider
 				ldata.SourceParams = lmeta.SourceParams
 			}
 
