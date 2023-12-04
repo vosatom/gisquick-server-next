@@ -766,6 +766,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["name"] = projectName
 	data["ows_url"] = fmt.Sprintf("/api/map/ows/%s", projectName)
 	data["ows_project"] = projectName
+	data["lang"] = settings.Language
 
 	topics := make([]domain.Topic, 0)
 

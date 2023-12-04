@@ -71,6 +71,11 @@ func (s *Server) handleGetProject() func(c echo.Context) error {
 				data["notifications"] = messages
 			}
 		}
+
+		if data["lang"] == "" {
+			data["lang"] = s.Config.Language
+		}
+
 		data["status"] = 200
 		// delete(data, "layers")
 		// return c.JSON(http.StatusOK, data["layers"])
