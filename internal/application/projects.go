@@ -640,7 +640,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 			// drawingOrder := indexOf(meta.LayersOrder, id)
 			// return !settings.Layers[id].Flags.Has("excluded") && rolesPerms.LayerFlags(id).Has("view")
 			// return drawingOrder != -1 && !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
-			return !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view"))
+			return !settings.Layers[id].Flags.Has("excluded") && (rolesPerms == nil || rolesPerms.LayerFlags(id).Has("view") || rolesPerms.LayerFlags(id).Has("query"))
 		},
 		func(id string) interface{} {
 			lmeta := meta.Layers[id]
