@@ -26,6 +26,7 @@ type LayerSettings struct {
 	// FieldsOrder          json.RawMessage              `json:"fields_order,omitempty"`
 	// ExcludedFields   json.RawMessage `json:"excluded_fields,omitempty"`
 	FieldsOrder      *FieldsConfig   `json:"fields_order,omitempty"`
+	Filter           string          `json:"filter,omitempty"`
 	ExcludedFields   *FieldsConfig   `json:"excluded_fields,omitempty"`
 	LegendDisabled   bool            `json:"legend_disabled,omitempty"`
 	CustomProperties json.RawMessage `json:"custom,omitempty"`

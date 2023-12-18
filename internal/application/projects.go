@@ -363,6 +363,7 @@ type BaseLayer struct {
 	SourceParams     map[string]json.RawMessage `json:"source"`
 	CustomProperties json.RawMessage            `json:"custom,omitempty"`
 	Visible          bool                       `json:"visible"`
+	Filter           string                     `json:"filter,omitempty"`
 
 	// WMS params, old API
 	URL       string   `json:"url"`
@@ -622,6 +623,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				Visible:          lmeta.Visible,
 				CustomProperties: lset.CustomProperties,
 				LegendDisabled:   lset.LegendDisabled,
+				Filter:           lset.Filter,
 			}
 			if lmeta.Type == "RasterLayer" && lmeta.Provider == "wms" {
 				ldata.Format = lmeta.SourceParams.String("format")
