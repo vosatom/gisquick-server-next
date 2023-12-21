@@ -57,17 +57,32 @@ type Authentication struct {
 	Roles []ProjectRole `json:"roles,omitempty"`
 }
 
+type SearchQueryParam struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type Geocoding struct {
+	Service     string             `json:"service,omitempty"`
+	URL         string             `json:"url,omitempty"`
+	QueryParams []SearchQueryParam `json:"query_params,omitempty"`
+}
+
 type ProjectSettings struct {
-	Auth            Authentication           `json:"auth"` // or access?
-	BaseLayers      []string                 `json:"base_layers"`
-	Layers          map[string]LayerSettings `json:"layers"`
-	Title           string                   `json:"title"`
-	MapCache        bool                     `json:"use_mapcache"`
-	Topics          []Topic                  `json:"topics"`
-	Extent          []float64                `json:"extent"`
-	InitialExtent   []float64                `json:"initial_extent"`
-	Scales          json.RawMessage          `json:"scales"`
-	TileResolutions []float64                `json:"tile_resolutions"`
-	Formatters      []json.RawMessage        `json:"formatters,omitempty"`
-	Proj4           map[string]string        `json:"proj4,omitempty"`
+	Auth             Authentication           `json:"auth"` // or access?
+	BaseLayers       []string                 `json:"base_layers"`
+	Layers           map[string]LayerSettings `json:"layers"`
+	Title            string                   `json:"title"`
+	MapCache         bool                     `json:"use_mapcache"`
+	Topics           []Topic                  `json:"topics"`
+	Extent           []float64                `json:"extent"`
+	InitialExtent    []float64                `json:"initial_extent"`
+	Scales           json.RawMessage          `json:"scales"`
+	TileResolutions  []float64                `json:"tile_resolutions"`
+	MapTiling        bool                     `json:"map_tiling"`
+	Formatters       []json.RawMessage        `json:"formatters,omitempty"`
+	Proj4            map[string]string        `json:"proj4,omitempty"`
+	Geocoding        *Geocoding               `json:"geocoding"`
+	SearchByLocation bool                     `json:"search_by_coords"`
 }

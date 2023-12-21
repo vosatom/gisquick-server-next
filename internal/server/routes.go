@@ -125,6 +125,7 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.GET("/api/map/ows/:user/:name", owsHandler, ProjectAccessOWS)
 	e.POST("/api/map/ows/:user/:name", owsHandler, ProjectAccessOWS)
 	e.GET("/api/map/capabilities/:user/:name", s.handleGetLayerCapabilities(), ProjectAccess)
+	e.GET("/api/map/search/:user/:name/*", s.handleSearch(), ProjectAccess)
 
 	e.POST("/api/project/reload/:user/:name", s.handleProjectReload, ProjectAdminAccess)
 
