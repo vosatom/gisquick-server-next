@@ -375,25 +375,26 @@ type OverlayLayer struct {
 	Title string `json:"title"`
 	Type  string `json:"type"`
 	// Extent       []float64               `json:"extent"`
-	Projection           string                  `json:"projection"`
-	LegendURL            string                  `json:"legend_url,omitempty"`
-	LegendDisabled       bool                    `json:"legend_disabled,omitempty"`
-	Metadata             map[string]string       `json:"metadata"`
-	Attribution          map[string]string       `json:"attribution,omitempty"`
-	Attributes           []domain.LayerAttribute `json:"attributes,omitempty"`
-	Bands                []string                `json:"bands,omitempty"`
-	DrawingOrder         *int                    `json:"drawing_order,omitempty"`
-	Visible              bool                    `json:"visible"`
-	Hidden               bool                    `json:"hidden"`
-	Queryable            bool                    `json:"queryable"`
-	GeomType             string                  `json:"wkb_type,omitempty"`
-	InfoPanel            string                  `json:"infopanel_component,omitempty"`
-	Permissions          domain.LayerPermission  `json:"permissions"`
-	AttributeTableFields []string                `json:"attr_table_fields,omitempty"`
-	InfoPanelFields      []string                `json:"info_panel_fields,omitempty"`
-	ExportFields         []string                `json:"export_fields,omitempty"`
-	CustomProperties     json.RawMessage         `json:"custom,omitempty"`
-	Relations            json.RawMessage         `json:"relations,omitempty"`
+	Projection           string                     `json:"projection"`
+	LegendURL            string                     `json:"legend_url,omitempty"`
+	LegendDisabled       bool                       `json:"legend_disabled,omitempty"`
+	Metadata             map[string]string          `json:"metadata"`
+	Attribution          map[string]string          `json:"attribution,omitempty"`
+	Attributes           []domain.LayerAttribute    `json:"attributes,omitempty"`
+	Bands                []string                   `json:"bands,omitempty"`
+	DrawingOrder         *int                       `json:"drawing_order,omitempty"`
+	Visible              bool                       `json:"visible"`
+	Hidden               bool                       `json:"hidden"`
+	Queryable            bool                       `json:"queryable"`
+	GeomType             string                     `json:"wkb_type,omitempty"`
+	InfoPanel            string                     `json:"infopanel_component,omitempty"`
+	Permissions          domain.LayerPermission     `json:"permissions"`
+	AttributeTableFields []string                   `json:"attr_table_fields,omitempty"`
+	InfoPanelFields      []string                   `json:"info_panel_fields,omitempty"`
+	ExportFields         []string                   `json:"export_fields,omitempty"`
+	CustomProperties     json.RawMessage            `json:"custom,omitempty"`
+	Relations            json.RawMessage            `json:"relations,omitempty"`
+	SourceParams         map[string]json.RawMessage `json:"source,omitempty"`
 }
 
 func filterList(list []string, test func(item string) bool) []string {
@@ -640,6 +641,12 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				CustomProperties: lset.CustomProperties,
 				LegendDisabled:   lset.LegendDisabled,
 			}
+
+			if lmeta.Type == "RasterLayer" && lmeta.Provider == "wms" {
+				ldata.SourceParams = lmeta.SourceParams
+			}
+
+
 			// if !lset.Flags.Has("render_off") {
 			// 	drawingOrder := indexOf(meta.LayersOrder, id)
 			// 	ldata.DrawingOrder = &drawingOrder
