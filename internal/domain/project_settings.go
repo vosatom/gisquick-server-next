@@ -36,6 +36,7 @@ type Topic struct {
 	Title    string   `json:"title"`
 	Abstract string   `json:"abstract"`
 	Layers   []string `json:"visible_overlays"`
+	ThumbnailUrl string   `json:"thumbnail_url"`
 }
 
 type ProjectRole struct {
