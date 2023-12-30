@@ -32,10 +32,11 @@ type LayerSettings struct {
 }
 
 type Topic struct {
-	ID       string   `json:"id"`
-	Title    string   `json:"title"`
-	Abstract string   `json:"abstract"`
-	Layers   []string `json:"visible_overlays"`
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Abstract     string   `json:"abstract"`
+	Layers       []string `json:"visible_overlays"`
+	BaseLayer    string   `json:"base_layer"`
 	ThumbnailUrl string   `json:"thumbnail_url"`
 }
 

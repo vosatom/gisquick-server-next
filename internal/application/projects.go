@@ -795,8 +795,8 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				layers = append(layers, meta.Layers[lid].Name)
 			}
 		}
-		if len(layers) > 0 {
-			topics = append(topics, domain.Topic{Title: topic.Title, Abstract: topic.Abstract, Layers: layers})
+		if len(layers) > 0 || topic.BaseLayer != "" {
+			topics = append(topics, domain.Topic{Title: topic.Title, Abstract: topic.Abstract, Layers: layers, BaseLayer: topic.BaseLayer, ThumbnailUrl: topic.ThumbnailUrl})
 		}
 	}
 	data["topics"] = topics
