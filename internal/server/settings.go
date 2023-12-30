@@ -517,6 +517,7 @@ func (s *Server) handleUpdateProjectMeta() func(echo.Context) error {
 			}
 			return err
 		}
+		s.InvalidateMapCache(projectName)
 		return c.NoContent(http.StatusOK)
 	}
 }
@@ -753,6 +754,7 @@ func (s *Server) handleProjectReload(c echo.Context) error {
 		s.log.Errorw("[handleProjectReload]", "project", projectName, "status", resp.StatusCode, "msg", string(msg))
 		return fmt.Errorf("reloading project on qgis server: %s", string(msg))
 	}
+	s.InvalidateMapCache(projectName)
 	return c.NoContent(http.StatusOK)
 }
 

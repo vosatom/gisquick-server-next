@@ -147,4 +147,10 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	// // Mapcache
 	// e.GET("/api/map/tile/:project_hash/tile/:layers_hash/:z/:x/:y", s.handleMapcacheTile())
 	// e.GET("/api/map/tile/:project_hash/legend/:layers_hash/:filename", s.handleMapcacheLegend())
+
+	if s.Config.MapCacheRoot != "" {
+		cachedOwsHandler := s.handleMapCachedOws()
+		e.GET("/api/map/cached_ows/:user/:name", cachedOwsHandler, ProjectAccessOWS)
+		e.DELETE("/api/map/cached_ows/:user/:name", s.removeMapCache, ProjectAccessOWS)
+	}
 }

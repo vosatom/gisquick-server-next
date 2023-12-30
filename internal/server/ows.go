@@ -298,6 +298,8 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 							return echo.ErrForbidden
 						}
 					}
+					
+					s.InvalidateMapCache(projectName)
 				} else if strings.EqualFold(params.Request, "GetFeature") {
 					if req.Method == "POST" {
 						bodyBytes, _ := ioutil.ReadAll(req.Body)
