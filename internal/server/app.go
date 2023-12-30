@@ -17,6 +17,7 @@ type AppData struct {
 	Language         string `json:"lang"`
 	LandingProject   string `json:"landing_project,omitempty"`
 	PasswordResetUrl string `json:"reset_password_url,omitempty"`
+	SignupUrl        string `json:"signup_url,omitempty"`
 }
 
 type UserInfo struct {
@@ -69,6 +70,9 @@ func (s *Server) handleAppInit(c echo.Context) error {
 	userProfile, err := s.getUserProfile(user)
 	if err != nil {
 		s.log.Warnw("handleAppInit", "user", user.Username, zap.Error(err))
+	}
+	if s.Config.SignupAPI {
+		app.SignupUrl = "/api/accounts/signup"
 	}
 	data := AppPayload{App: app, User: UserData{User: user, Profile: userProfile}}
 	return c.JSON(http.StatusOK, data)
