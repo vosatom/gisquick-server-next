@@ -63,6 +63,7 @@ type ProjectSettings struct {
 	BaseLayers      []string                 `json:"base_layers"`
 	Layers          map[string]LayerSettings `json:"layers"`
 	Title           string                   `json:"title"`
+	Description      string                   `json:"description"`
 	MapCache        bool                     `json:"use_mapcache"`
 	Topics          []Topic                  `json:"topics"`
 	Extent          []float64                `json:"extent"`

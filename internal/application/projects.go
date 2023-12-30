@@ -765,6 +765,10 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	// temporary backward compatibility
 	data["root_title"] = data["title"]
 
+	if settings.Description != "" {
+		data["description"] = settings.Description
+	}
+
 	data["name"] = projectName
 	data["ows_url"] = fmt.Sprintf("/api/map/ows/%s", projectName)
 	data["ows_project"] = projectName
