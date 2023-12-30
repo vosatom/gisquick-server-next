@@ -3,14 +3,9 @@ package server
 import (
 	"archive/zip"
 	"compress/gzip"
-	"context"
-	"crypto/rand"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -20,7 +15,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,10 +23,7 @@ import (
 	"github.com/gisquick/gisquick-server/internal/application"
 	"github.com/gisquick/gisquick-server/internal/domain"
 	"github.com/labstack/echo/v4"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"go.uber.org/zap"
-	_ "golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -883,71 +874,82 @@ func (s *Server) appMediaFileHandler(c echo.Context) error {
 	return c.File(absPath)
 }
 
-func (s *Server) mediaFileHandlerService(cacheDir string) func(echo.Context) error {
+func (s *Server) mediaFileHandlerService() func(echo.Context) error {
 	var lock singleflight.Group
 	return func(c echo.Context) error {
 		projectName := c.Get("project").(string)
 		thumbnail := c.QueryParam("thumbnail")
 		providerId := c.QueryParam("provider_id")
 
-		provider, err := getProvider(s, projectName, providerId)
+		fileHandler, err := s.getFileHandler(projectName, providerId)
 		if err != nil {
 			return err
 		}
 
-		filePath := c.QueryParam("path")
-		// folder := filepath.Dir(filePath)
+		width := 400
+		height := 400
+		quality := 85
 
-		url := provider.StoreUrl + filePath
-		absPath := filepath.Join(s.Config.ProjectsRoot, projectName, filePath)
-		if strings.EqualFold(thumbnail, "true") {
-			key := filepath.Join(projectName, filePath)
-			val, err, _ := lock.Do(key, func() (interface{}, error) {
-				thumbAbsPath := filepath.Join(cacheDir, key)
-				err = os.MkdirAll(filepath.Dir(thumbAbsPath), 0777)
-				if err != nil {
-					return "", err
-				}
-
-				// fetch input data
-				response, err := http.Get(url)
-				if err != nil {
-					return "", err
-				}
-				// don't forget to close the response
-				defer response.Body.Close()
-
-				// decode input data to image
-				srcImage, _, err := image.Decode(response.Body)
-				if err != nil {
-					return "", err
-				}
-
-				dstImageFit := imaging.Fit(srcImage, 500, 500, imaging.Lanczos)
-				format, err := imaging.FormatFromFilename(absPath)
-				if err != nil {
-					format = imaging.JPEG
-				}
-
-				f, err := os.Create(thumbAbsPath)
-				if err != nil {
-					return "", err
-				}
-				defer f.Close()
-				err = imaging.Encode(f, dstImageFit, format, imaging.JPEGQuality(75))
-				return thumbAbsPath, err
-			})
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					return echo.NewHTTPError(http.StatusNotFound, "Image not found")
-				}
-				return err
-			}
-			absPath = val.(string)
+		src := c.QueryParam("src")
+		parsedUrl, err := url.Parse(src)
+		if err != nil {
+			return err
 		}
-		// maybe when media folders permissions will be implemented
-		// c.Response().Header().Set("Cache-Control", "private, must-revalidate")
-		return c.Redirect(308, url)
+
+		filePath := filepath.Clean(parsedUrl.Path)
+
+		switch fileHandler := fileHandler.(type) {
+		case S3FileHandler:
+			parsedStoreUrl, _ := url.Parse(fileHandler.Provider.StoreUrl)
+			fileHandler.StoreUrl = *parsedStoreUrl
+		}
+
+		if !fileHandler.CheckValidSource(*parsedUrl) {
+			return echo.ErrNotFound
+		}
+
+		resultPath := src
+		redirect := fileHandler.HasRemoteSource()
+
+		if strings.EqualFold(thumbnail, "true") {
+			val, err, _ := lock.Do(filePath, func() (interface{}, error) {
+				source := fileHandler.GetExistingThumbnail(filePath)
+				if source != "" {
+					return source, nil
+				}
+
+				img, err := fileHandler.LoadSourceImage(filePath)
+				if err != nil {
+					return "", err
+				}
+
+				dstImageFit := imaging.Fit(img, width, height, imaging.Lanczos)
+
+				newSrc, err := fileHandler.SaveThumbnail(dstImageFit, filePath, quality)
+				if err != nil {
+					return "", err
+				}
+				return newSrc, nil
+			})
+
+			if err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "Cannot get thumbnail")
+			}
+
+			resultPath = val.(string)
+		}
+
+		if resultPath != "" && err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return echo.NewHTTPError(http.StatusNotFound, "Image not found")
+			}
+			return err
+		}
+
+		if redirect {
+			return c.Redirect(308, resultPath)
+		}
+		return c.File(resultPath)
 	}
 }
 
@@ -993,10 +995,9 @@ func (s *Server) handleUploadMediaFileLocal(c echo.Context, directory string) er
 		return err
 	}
 	return c.JSON(http.StatusOK, MediaFile{finfo, filepath.Base(finfo.Path)})
-
 }
 
-func getProvider(s *Server, projectName string, providerId string) (*domain.StorageProvider, error) {
+func (s *Server) getFileHandler(projectName string, providerId string) (FileHandler, error) {
 	info, err := s.projects.GetSettings(projectName)
 	if err != nil {
 		if errors.Is(err, domain.ErrProjectNotExists) {
@@ -1007,64 +1008,31 @@ func getProvider(s *Server, projectName string, providerId string) (*domain.Stor
 		return nil, err
 	}
 
-	providersConfig := info.Storage
-	provider := findObjectByID(providersConfig, providerId)
-	if provider == nil {
-		provider = &domain.StorageProvider{
-			ID:   "local",
-			Type: "local",
-		}
-	}
-	return provider, nil
+	projectPath := filepath.Join(s.Config.ProjectsRoot, projectName)
+	thumbnailsPath := filepath.Join(s.Config.ThumbnailsRoot, projectName)
+
+	return GetFileHandler(info.Storage, providerId, projectPath, thumbnailsPath)
 }
 
-
 func (s *Server) handleUploadMediaFileService(c echo.Context) error {
-	directory := c.QueryParam("path")
+	directory := c.QueryParam("directory")
 	projectName := c.Get("project").(string)
 	providerId := c.QueryParam("provider_id")
 
-	provider, err := getProvider(s, projectName, providerId)
+	fileHandler, err := s.getFileHandler(projectName, providerId)
 	if err != nil {
 		return err
 	}
-	providerType := provider.Type
 
-	if providerType == "s3" {
-		return s.handleUploadMediaFileS3(c, directory, provider)
+	switch fileHandler := fileHandler.(type) {
+	case S3FileHandler:
+		return s.handleUploadMediaFileS3(c, directory, fileHandler)
 	}
 	return s.handleUploadMediaFileLocal(c, directory)
 }
 
-type AWSMediaFile struct {
-	domain.ProjectFile
-	Filename string `json:"filename"`
-}
-
-func findObjectByID(array []domain.StorageProvider, id string) *domain.StorageProvider {
-	for _, obj := range array {
-		if obj.ID == id {
-			return &obj
-		}
-	}
-	return nil
-}
-
-func (s *Server) handleUploadMediaFileS3(c echo.Context, directory string, provider *domain.StorageProvider) error {
-	endpointUrl, err := url.Parse(provider.StoreUrl)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-	minioClient, err := minio.New(endpointUrl.Host, &minio.Options{
-		Creds:  credentials.NewStaticV4(provider.AccessKey, provider.SecretKey, ""),
-		Secure: true,
-	})
-	if err != nil {
-		return fmt.Errorf("connecting to service: %w", err)
-	}
-
+func (s *Server) handleUploadMediaFileS3(c echo.Context, directory string, fileHandler S3FileHandler) error {
+	// TODO: Handle 403
 	file, err := c.FormFile("file")
 	if err != nil {
 		return fmt.Errorf("reading file: %w", err)
@@ -1075,65 +1043,19 @@ func (s *Server) handleUploadMediaFileS3(c echo.Context, directory string, provi
 		return fmt.Errorf("reading upload file: %w", err)
 	}
 
-  defer src.Close()
+	defer src.Close()
 
-	pattern, err := processFileName(file)
+	objectName, err := ProcessPath(directory, file)
 	if err != nil {
-		return err
+		return fmt.Errorf("processing path: %w", err)
 	}
 
-	bucketName := provider.Bucket
-	parsedURL, err := url.Parse(pattern)
+	fileResult, err := fileHandler.SaveImage(src, file.Size, objectName)
 	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return nil
-	}
-	fileName := path.Clean(parsedURL.Path)
-	objectName := path.Join(directory, fileName)
-
-	miniinfo, err := minioClient.PutObject(ctx, bucketName, objectName, src, file.Size, minio.PutObjectOptions{})
-	if err != nil {
-		return err
+		return fmt.Errorf("unable to upload: %w", err)
 	}
 
-	filePath := path.Join(bucketName, miniinfo.Key)
-	if err != nil {
-			return fmt.Errorf("unable to upload: %w", err)
-	}
-
-	return c.JSON(http.StatusOK, AWSMediaFile{domain.ProjectFile{Path: filePath, Size: file.Size}, fileName})
-}
-
-func processFileName(file *multipart.FileHeader) (string, error) {
-	pattern := file.Filename
-
-	if strings.Contains(pattern, "<timestamp>") {
-		pattern = strings.Replace(pattern, "<timestamp>", fmt.Sprint(time.Now().Unix()), 1)
-	}
-
-	if strings.Contains(pattern, "<random>") {
-		// https://github.com/joncrlsn/fileutil/blob/5aac37a6ac963fd712b618b024d2eb14aa190958/fileutil.go#L98-L103
-		randBytes := make([]byte, 16)
-		rand.Read(randBytes)
-		pattern = strings.Replace(pattern, "<random>", hex.EncodeToString(randBytes), 1)
-	}
-
-	if strings.Contains(pattern, "<hash>") {
-		src, err := file.Open()
-		if err != nil {
-			return "", err
-		}
-		defer src.Close()
-	
-		h := sha1.New()
-		if _, err := io.Copy(h, src); err != nil {
-			return "", err
-		}
-
-		hash := fmt.Sprintf("%x", h.Sum(nil))
-		pattern = strings.Replace(pattern, "<hash>", hash, 1)
-	}
-	return pattern, nil
+	return c.JSON(http.StatusOK, fileResult)
 }
 
 func (s *Server) handleDeleteMediaFile(c echo.Context) error {

@@ -68,15 +68,15 @@ func (s *Server) AddRoutes(e *echo.Echo) {
 	e.GET("/api/project/info/:user/:name", s.handleGetProjectInfo, ProjectAdminAccess)
 	e.GET("/api/project/full-info/:user/:name", s.handleGetProjectFullInfo(), ProjectAdminAccess)
 
-	e.GET("/api/project/media/:user/:name/*", s.mediaFileHandler("/tmp/thumbnails"), ProjectAccess)
+	e.GET("/api/project/media/:user/:name/*", s.mediaFileHandler(s.Config.ThumbnailsRoot), ProjectAccess)
 	e.GET("/api/project/media/:user/:name/web/app/*", s.appMediaFileHandler)
 	e.POST("/api/project/media/:user/:name/*", s.handleUploadMediaFile, ProjectAccess)
 	e.DELETE("/api/project/media/:user/:name/*", s.handleDeleteMediaFile, ProjectAccess)
 	e.POST("/api/project/script/:user/:name", s.handleScriptUpload(), ProjectAdminAccess)
 	e.DELETE("/api/project/script/:user/:name", s.handleDeleteScript(), ProjectAdminAccess)
 
-	e.GET("/api/project/media-file/:user/:name", s.mediaFileHandlerService("/tmp/thumbnails"), ProjectAccess)
-	e.POST("/api/project/media-file/:user/:name", s.handleUploadMediaFileService, ProjectAccess)
+	e.GET("/api/project/media_file/:user/:name", s.mediaFileHandlerService(), ProjectAccess)
+	e.POST("/api/project/media_file/:user/:name", s.handleUploadMediaFileService, ProjectAccess)
 
 	e.GET("/api/project/file/:user/:name/*", s.handleProjectFile, ProjectAdminAccess)
 	e.GET("/api/project/download/:user/:name", s.handleDownloadProjectFiles, ProjectAdminAccess)

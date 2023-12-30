@@ -26,6 +26,7 @@ type Config struct {
 	LandingProject       string
 	MapserverURL         string
 	MapCacheRoot         string
+	ThumbnailsRoot       string
 	ProjectsRoot         string
 	SiteURL              string
 	SecretKey            string

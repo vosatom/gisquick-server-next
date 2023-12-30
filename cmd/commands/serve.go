@@ -67,6 +67,7 @@ func Serve() error {
 			Language             string `conf:"default:en-us"`
 			ProjectsRoot         string `conf:"default:/publish"`
 			MapCacheRoot         string
+			ThumbnailsRoot       string `conf:"default:/tmp/cache"`
 			MapserverURL         string
 			PluginsURL           string
 			SignupAPI            bool
@@ -204,6 +205,7 @@ func Serve() error {
 		LandingProject:       cfg.Gisquick.LandingProject,
 		MapserverURL:         cfg.Gisquick.MapserverURL,
 		MapCacheRoot:         cfg.Gisquick.MapCacheRoot,
+		ThumbnailsRoot:       cfg.Gisquick.ThumbnailsRoot,
 		ProjectsRoot:         cfg.Gisquick.ProjectsRoot,
 		PluginsURL:           cfg.Gisquick.PluginsURL,
 		SignupAPI:            cfg.Gisquick.SignupAPI,
