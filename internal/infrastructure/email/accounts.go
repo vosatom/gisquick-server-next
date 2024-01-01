@@ -5,6 +5,7 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"net/url"
+	"path"
 	texttemplate "text/template"
 
 	"github.com/gisquick/gisquick-server/internal/domain"
@@ -26,22 +27,22 @@ type EmailTemplate struct {
 	Text *texttemplate.Template
 }
 
-func parseEmailTemplate(name string) EmailTemplate {
+func parseEmailTemplate(templatesRoot string, name string) EmailTemplate {
 	funcs := map[string]any{
 		"query_escape": url.QueryEscape,
 	}
 	htmlFuncs := htmltemplate.FuncMap(funcs)
 	textFuncs := texttemplate.FuncMap(funcs)
-	html := htmltemplate.Must(htmltemplate.New("email").Funcs(htmlFuncs).ParseFiles("./templates/email_base.html", fmt.Sprintf("%s.html", name)))
-	text := texttemplate.Must(texttemplate.New("email").Funcs(textFuncs).ParseFiles("./templates/email_base.txt", fmt.Sprintf("%s.txt", name)))
+	html := htmltemplate.Must(htmltemplate.New("email").Funcs(htmlFuncs).ParseFiles(path.Join(templatesRoot, "/email_base.html"), fmt.Sprintf("%s.html", name)))
+	text := texttemplate.Must(texttemplate.New("email").Funcs(textFuncs).ParseFiles(path.Join(templatesRoot, "/email_base.txt"), fmt.Sprintf("%s.txt", name)))
 	return EmailTemplate{HTML: html, Text: text}
 }
 
-func NewAccountsEmailSender(client EmailService, sender, siteURL, activationSubject, passwordResetSubject string) *AccountsEmailSender {
+func NewAccountsEmailSender(client EmailService, templatesRoot string, sender, siteURL, activationSubject, passwordResetSubject string) *AccountsEmailSender {
 	templates := make(map[string]EmailTemplate, 3)
-	templates["activation_email"] = parseEmailTemplate("./templates/activation_email")
-	templates["invitation_email"] = parseEmailTemplate("./templates/invitation_email")
-	templates["password_reset_email"] = parseEmailTemplate("./templates/reset_password_email")
+	templates["activation_email"] = parseEmailTemplate(templatesRoot, path.Join(templatesRoot, "/activation_email"))
+	templates["invitation_email"] = parseEmailTemplate(templatesRoot, path.Join(templatesRoot, "/invitation_email"))
+	templates["password_reset_email"] = parseEmailTemplate(templatesRoot, path.Join(templatesRoot, "/reset_password_email"))
 	return &AccountsEmailSender{
 		client:               client,
 		sender:               sender,

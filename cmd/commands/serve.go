@@ -68,6 +68,7 @@ func Serve() error {
 			ProjectsRoot         string `conf:"default:/publish"`
 			MapCacheRoot         string
 			ThumbnailsRoot       string `conf:"default:/tmp/cache"`
+			TemplatesRoot        string `conf:"default:./templates"`
 			MapserverURL         string
 			PluginsURL           string
 			SignupAPI            bool
@@ -219,6 +220,7 @@ func Serve() error {
 	tokenGenerator := security.NewTokenGenerator(cfg.Auth.SecretKey, "signup", cfg.Auth.EmailTokenExpiration)
 	emailSender := email.NewAccountsEmailSender(
 		es,
+		cfg.Gisquick.TemplatesRoot,
 		cfg.Email.Sender,
 		cfg.Web.SiteURL,
 		cfg.Email.ActivationSubject,
