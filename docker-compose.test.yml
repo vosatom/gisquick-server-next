@@ -1,0 +1,49 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:6.0.5
+    container_name: redis
+    restart: always
+    ports:
+      - 6379:6379
+    volumes:
+      - /tmp/gisquick/redis:/data
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - /tmp/gisquick/minio:/data
+    environment:
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+
+  postgres:
+    image: postgres:12.3
+    container_name: postgres
+    restart: always
+    ports:
+      - 5432:5432
+    volumes:
+      - /tmp/gisquick/postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: gisquick
+      POSTGRES_PASSWORD: gisquick
+      PGDATA: /var/lib/postgresql/data/pgdata
+
+  createbuckets:
+    image: minio/minio
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minio minio123;
+      /usr/bin/mc mb myminio/gisquick;
+      /usr/bin/mc anonymous set public myminio/gisquick;
+      exit 0;
+      "
+  
