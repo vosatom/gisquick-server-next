@@ -396,11 +396,6 @@ type OverlayLayer struct {
 	Relations            json.RawMessage         `json:"relations,omitempty"`
 }
 
-type SearchConfig struct {
-	GeocodingAPI     string `json:"geocoding_api,omitempty"`
-	SearchByLocation bool   `json:"search_by_coords"`
-}
-
 func filterList(list []string, test func(item string) bool) []string {
 	res := make([]string, 0)
 	for _, v := range list {
@@ -800,13 +795,6 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 		}
 	}
 	data["topics"] = topics
-	if settings.Geocoding != nil || settings.SearchByLocation {
-		search := SearchConfig{SearchByLocation: settings.SearchByLocation}
-		if settings.Geocoding != nil {
-			search.GeocodingAPI = settings.Geocoding.Service
-		}
-		data["search"] = search
-	}
 	return data, nil
 }
 
