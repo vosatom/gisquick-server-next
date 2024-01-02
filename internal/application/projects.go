@@ -622,7 +622,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 				lflags = lflags.Intersection(rolesPerms.LayerFlags(id))
 			}
 
-			queryable := lmeta.Flags.Has("query") && !lset.Flags.Has("hidden") && lflags.Has("query")
+			queryable := lmeta.Flags.Has("query") && lflags.Has("query")
 
 			ldata := OverlayLayer{
 				Bands:            lmeta.Bands,
@@ -779,6 +779,16 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 	data["name"] = projectName
 	data["ows_url"] = fmt.Sprintf("/api/map/ows/%s", projectName)
 	data["ows_project"] = projectName
+	var storage []map[string]interface{}
+	for _, service := range settings.Storage {
+		filteredService := make(map[string]interface{})
+		filteredService["id"] = service.ID
+		filteredService["type"] = service.Type
+		filteredService["store_url"] = service.StoreUrl
+		storage = append(storage, filteredService)
+	}
+	data["storage"] = storage
+	data["services"] = settings.Services
 
 	topics := make([]domain.Topic, 0)
 
@@ -803,7 +813,7 @@ func (s *projectService) GetMapConfig(projectName string, user domain.User) (map
 			}
 		}
 		if len(layers) > 0 || topic.BaseLayer != "" {
-			topics = append(topics, domain.Topic{Title: topic.Title, Abstract: topic.Abstract, Layers: layers, BaseLayer: topic.BaseLayer, ThumbnailUrl: topic.ThumbnailUrl})
+			topics = append(topics, domain.Topic{Title: topic.Title, Abstract: topic.Abstract, Layers: layers, BaseLayer: meta.Layers[topic.BaseLayer].Name, ThumbnailUrl: topic.ThumbnailUrl})
 		}
 	}
 	data["topics"] = topics

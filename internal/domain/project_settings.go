@@ -59,20 +59,54 @@ type Authentication struct {
 	Roles []ProjectRole `json:"roles,omitempty"`
 }
 
+type StorageProvider struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Type  string `json:"type"`
+
+	StoreUrl  string `json:"store_url,omitempty"`
+	Bucket    string `json:"bucket,omitempty"`
+	Region    string `json:"region,omitempty"`
+	AccessKey string `json:"access_key,omitempty"`
+	SecretKey string `json:"secret_key,omitempty"`
+}
+
+type ServiceProvider struct {
+	ID       string          `json:"id"`
+	Label    string          `json:"label"`
+	Type     string          `json:"type"`
+	Settings json.RawMessage `json:"settings"`
+}
+
+type ServiceFeature struct {
+	ID string `json:"id"`
+
+	Enabled  bool            `json:"enabled"`
+	Provider any             `json:"provider,omitempty"`
+	Settings json.RawMessage `json:"settings"`
+}
+
+type Services struct {
+	Providers map[string]ServiceProvider `json:"providers"`
+	Features  map[string]ServiceFeature  `json:"features"`
+}
+
 type ProjectSettings struct {
 	MapTiling        bool                     `json:"map_tiling"`
-	Auth            Authentication           `json:"auth"` // or access?
-	BaseLayers      []string                 `json:"base_layers"`
-	Layers          map[string]LayerSettings `json:"layers"`
-	Title           string                   `json:"title"`
+	Auth             Authentication           `json:"auth"` // or access?
+	BaseLayers       []string                 `json:"base_layers"`
+	Layers           map[string]LayerSettings `json:"layers"`
+	Title            string                   `json:"title"`
 	Description      string                   `json:"description"`
-	MapCache        bool                     `json:"use_mapcache"`
-	Topics          []Topic                  `json:"topics"`
-	Extent          []float64                `json:"extent"`
-	InitialExtent   []float64                `json:"initial_extent"`
-	Scales          json.RawMessage          `json:"scales"`
-	TileResolutions []float64                `json:"tile_resolutions"`
-	Formatters      []json.RawMessage        `json:"formatters,omitempty"`
-	Proj4           map[string]string        `json:"proj4,omitempty"`
+	MapCache         bool                     `json:"use_mapcache"`
+	Topics           []Topic                  `json:"topics"`
+	Extent           []float64                `json:"extent"`
+	InitialExtent    []float64                `json:"initial_extent"`
+	Scales           json.RawMessage          `json:"scales"`
+	TileResolutions  []float64                `json:"tile_resolutions"`
+	Formatters       []json.RawMessage        `json:"formatters,omitempty"`
+	Proj4            map[string]string        `json:"proj4,omitempty"`
+	Storage          []StorageProvider        `json:"storage"`
+	Services         Services                 `json:"services"`
 	CustomProperties json.RawMessage          `json:"custom"`
 }

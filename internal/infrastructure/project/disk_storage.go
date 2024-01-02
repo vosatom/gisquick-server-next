@@ -959,6 +959,8 @@ func (s *DiskStorage) UpdateSettings(projectName string, data json.RawMessage) e
 	if err := json.Unmarshal(data, &sInfo); err != nil {
 		return fmt.Errorf("extracting authentication settings: %w", err)
 	}
+
+	// TODO: check AllowedFileServices
 	if err := s.saveConfigFile(projectName, "settings.json", data); err != nil {
 		return fmt.Errorf("saving settings file: %w", err)
 	}
