@@ -355,19 +355,21 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 						if err := (&echo.DefaultBinder{}).BindQueryParams(c, getFeatureParams); err != nil {
 							return echo.NewHTTPError(http.StatusBadRequest, "Invalid GetFeature query parameters")
 						}
-						// note: no support for multiple layers
 						layername := getFeatureParams.TypeName
-						if layername == "" {
-							layername = strings.SplitN(getFeatureParams.FeatureID, ".", 2)[0]
+						if layername == "" && getFeatureParams.FeatureID != "" {
+							layerNames := strings.Split(getFeatureParams.FeatureID, ",")
+							for i, layerName := range layerNames {
+								layerNames[i] = strings.SplitN(layerName, ".", 2)[0]
+							}
+							layername = strings.Join(layerNames, ",")
 						}
 						if layername == "" {
 							return echo.ErrBadRequest
 						}
-						if !getLayerPermissions(layername).Has("query") {
-							return echo.ErrForbidden
-						}
-						attrsFlags := getLayerAttributesFlags(layername)
+
 						if getFeatureParams.PropertyName != "" {
+							// note: no support for multiple layers
+							attrsFlags := getLayerAttributesFlags(layername)
 							properties := strings.Split(getFeatureParams.PropertyName, ",")
 							for _, pName := range properties {
 								aFlags, exist := attrsFlags[pName]
@@ -379,16 +381,32 @@ func (s *Server) handleMapOws() func(c echo.Context) error {
 								return echo.ErrForbidden
 							}
 						} else {
-							var properties []string
-							for name, flags := range attrsFlags {
-								if flags.Has("view") {
-									properties = append(properties, name)
+							propertyName := [][]string{}
+							for _, lname := range strings.Split(layername, ",") {
+								if !getLayerPermissions(lname).Has("query") {
+									return echo.ErrForbidden
 								}
+
+								attrsFlags := getLayerAttributesFlags(lname)
+								var properties []string
+								for name, flags := range attrsFlags {
+									if flags.Has("view") {
+										properties = append(properties, name)
+									}
+								}
+								if len(properties) == 0 || (len(properties) == 1 && properties[0] == "geometry") {
+									return echo.ErrForbidden
+								}
+								propertyName = append(propertyName, properties)
 							}
-							if len(properties) == 0 || (len(properties) == 1 && properties[0] == "geometry") {
-								return echo.ErrForbidden
+
+							if len(propertyName) > 0 {
+								result := ""
+								for _, properties := range propertyName {
+									result += "(" + strings.Join(properties, ",") + ")"
+								}
+								replaceQueryParam(query, "PROPERTYNAME", result)
 							}
-							replaceQueryParam(query, "PROPERTYNAME", strings.Join(properties, ","))
 						}
 					}
 				}
