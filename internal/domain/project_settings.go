@@ -52,6 +52,9 @@ type RolePermissions struct {
 	Attributes map[string]map[string]Flags `json:"attributes"`
 	Layers     map[string]Flags            `json:"layers"`
 	Topics     []string                    `json:"topics"`
+
+	// @TODO: replace when file upload permissions is implemented
+	Media bool `json:"custom_media_upload"`
 }
 
 type Authentication struct {
@@ -93,29 +96,29 @@ type Services struct {
 }
 
 type Bookmark struct {
-	ID string `json:"id"`
+	ID      string `json:"id"`
 	Content string `json:"content"`
 }
 
 type ProjectSettings struct {
-	MapTiling        bool                     `json:"map_tiling"`
-	Auth             Authentication           `json:"auth"` // or access?
-	Users            []string                 `json:"users,omitempty"`
-	BaseLayers       []string                 `json:"base_layers"`
-	Layers           map[string]LayerSettings `json:"layers"`
-	Title            string                   `json:"title"`
-	Description      string                   `json:"description"`
-	MapCache         bool                     `json:"use_mapcache"`
-	Topics           []Topic                  `json:"topics"`
-	Extent           []float64                `json:"extent"`
-	InitialExtent    []float64                `json:"initial_extent"`
-	Scales           json.RawMessage          `json:"scales"`
-	TileResolutions  []float64                `json:"tile_resolutions"`
-	Formatters       []json.RawMessage        `json:"formatters,omitempty"`
-	Proj4            map[string]string        `json:"proj4,omitempty"`
-	Storage          []StorageProvider        `json:"storage"`
-	Services         Services                 `json:"services"`
-	Language         string                   `json:"lang"`
-	CustomProperties json.RawMessage          `json:"custom"`
+	MapTiling        bool                           `json:"map_tiling"`
+	Auth             Authentication                 `json:"auth"` // or access?
+	Users            []string                       `json:"users,omitempty"`
+	BaseLayers       []string                       `json:"base_layers"`
+	Layers           map[string]LayerSettings       `json:"layers"`
+	Title            string                         `json:"title"`
+	Description      string                         `json:"description"`
+	MapCache         bool                           `json:"use_mapcache"`
+	Topics           []Topic                        `json:"topics"`
+	Extent           []float64                      `json:"extent"`
+	InitialExtent    []float64                      `json:"initial_extent"`
+	Scales           json.RawMessage                `json:"scales"`
+	TileResolutions  []float64                      `json:"tile_resolutions"`
+	Formatters       []json.RawMessage              `json:"formatters,omitempty"`
+	Proj4            map[string]string              `json:"proj4,omitempty"`
+	Storage          []StorageProvider              `json:"storage"`
+	Services         Services                       `json:"services"`
+	Language         string                         `json:"lang"`
+	CustomProperties json.RawMessage                `json:"custom"`
 	Bookmarks        map[string]map[string]Bookmark `json:"bookmarks"`
 }

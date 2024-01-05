@@ -1024,6 +1024,24 @@ func (s *Server) handleUploadMediaFileService(c echo.Context) error {
 		return err
 	}
 
+	user, err := s.auth.GetUser(c)
+	settings, err := s.projects.GetSettings(projectName)
+
+	roles := domain.FilterUserRoles(user, settings.Auth.Roles)
+	if len(roles) > 0 {
+		fileUploadAllowed := false
+		for _, role := range roles {
+			if role.Permissions.Media {
+				fileUploadAllowed = true
+				break
+			}
+		}
+
+		if !fileUploadAllowed {
+			return echo.ErrForbidden
+		}
+	}
+
 	switch fileHandler := fileHandler.(type) {
 	case S3FileHandler:
 		return s.handleUploadMediaFileS3(c, directory, fileHandler)
