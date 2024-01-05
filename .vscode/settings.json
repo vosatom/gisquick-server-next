@@ -1,0 +1,16 @@
+{
+  "go.toolsEnvVars": {
+    "PROJECT_BASEPATH": "${workspaceFolder}",
+    "REDIS_ADDR": "localhost:6379",
+    "GISQUICK_MAPSERVER_URL": "http://localhost:8082/qgis-server",
+    "GISQUICK_TEMPLATES_ROOT": "${workspaceFolder}/templates",
+    "GISQUICK_PROJECTS_ROOT": "${workspaceFolder}/mocks/projects",
+    "GISQUICK_MAP_CACHE_ROOT": "${workspaceFolder}/cache",
+    "GISQUICK_THUMBNAILS_ROOT": "${workspaceFolder}/thumbnails",
+    "WEB_API_HOST": "0.0.0.0:8002",
+    "POSTGRES_HOST": "localhost",
+    "POSTGRES_USER": "gisquick",
+    "POSTGRES_DB": "gisquick",
+    "POSTGRES_PASSWORD": "gisquick",
+  }
+}
