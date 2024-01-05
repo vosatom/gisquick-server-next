@@ -23,6 +23,7 @@ import (
 	"github.com/gisquick/gisquick-server/internal/server"
 	"github.com/gisquick/gisquick-server/internal/server/auth"
 	"github.com/go-redis/redis/v8"
+	"github.com/jmoiron/sqlx"
 	mail "github.com/xhit/go-simple-mail/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -60,67 +61,85 @@ func (b *ByteSize) UnmarshalText(text []byte) error {
 	return b.Set(string(text))
 }
 
-func Serve() error {
-	cfg := struct {
-		Gisquick struct {
-			Debug                bool   `conf:"default:false"`
-			Language             string `conf:"default:en-us"`
-			ProjectsRoot         string `conf:"default:/publish"`
-			MapCacheRoot         string
-			ThumbnailsRoot       string `conf:"default:/tmp/cache"`
-			TemplatesRoot        string `conf:"default:./templates"`
-			MapserverURL         string
-			PluginsURL           string
-			SignupAPI            bool
-			ProjectSizeLimit     ByteSize `conf:"default:-1"`
-			AccountStorageLimit  ByteSize `conf:"default:-1"`
-			AccountProjectsLimit int      `conf:"default:-1"`
-			AccountLimiterConfig string
-			LandingProject       string
-			ProjectCustomization bool
-			Extensions           string
-		}
-		Auth struct {
-			SessionExpiration    time.Duration `conf:"default:24h"`
-			EmailTokenExpiration time.Duration `conf:"default:72h"`
-			SecretKey            string        `conf:"default:secret-key,mask"`
-		}
-		Web struct {
-			ReadTimeout     time.Duration `conf:"default:5s"`
-			WriteTimeout    time.Duration `conf:"default:10s"`
-			IdleTimeout     time.Duration `conf:"default:120s"`
-			ShutdownTimeout time.Duration `conf:"default:20s"`
-			SiteURL         string        `conf:"default:http://localhost"`
-			APIHost         string        `conf:"default:0.0.0.0:3000"`
-		}
-		Postgres struct {
-			User               string `conf:"default:postgres"`
-			Password           string `conf:"default:postgres,mask"`
-			Host               string `conf:"default:postgres"`
-			Name               string `conf:"default:postgres,env:POSTGRES_DB"`
-			Port               int    `conf:"default:5432"`
-			MaxIdleConns       int    `conf:"default:3"`
-			MaxOpenConns       int    `conf:"default:3"`
-			SSLMode            string `conf:"default:disable"`
-			StatementCacheMode string `conf:"default:prepare"`
-		}
-		Redis struct {
-			Addr     string `conf:"default:redis:6379"` // "/var/run/redis/redis.sock"
-			Network  string // "unix"
-			Password string `conf:"mask"`
-			DB       int    `conf:"default:0"`
-		}
-		Email struct {
-			Host                 string
-			Port                 int    `conf:"default:465"`
-			Encryption           string `conf:"default:SSL,help: Options [None|SSL|TLS|SSLTLS|STARTTLS]"`
-			Username             string
-			Password             string `conf:"mask"`
-			Sender               string
-			ActivationSubject    string `conf:"default:Gisquick Registration"`
-			PasswordResetSubject string `conf:"default:Gisquick Password Reset"`
-		}
-	}{}
+type AppConfig struct {
+	Gisquick struct {
+		Debug                bool   `conf:"default:false"`
+		Language             string `conf:"default:en-us"`
+		ProjectsRoot         string `conf:"default:/publish"`
+		MapCacheRoot         string
+		ThumbnailsRoot       string `conf:"default:/tmp/cache"`
+		TemplatesRoot        string `conf:"default:./templates"`
+		MapserverURL         string
+		PluginsURL           string
+		SignupAPI            bool
+		ProjectSizeLimit     ByteSize `conf:"default:-1"`
+		AccountStorageLimit  ByteSize `conf:"default:-1"`
+		AccountProjectsLimit int      `conf:"default:-1"`
+		AccountLimiterConfig string
+		LandingProject       string
+		ProjectCustomization bool
+		Extensions           string
+	}
+	Auth struct {
+		SessionExpiration    time.Duration `conf:"default:24h"`
+		EmailTokenExpiration time.Duration `conf:"default:72h"`
+		SecretKey            string        `conf:"default:secret-key,mask"`
+	}
+	Web struct {
+		ReadTimeout     time.Duration `conf:"default:5s"`
+		WriteTimeout    time.Duration `conf:"default:10s"`
+		IdleTimeout     time.Duration `conf:"default:120s"`
+		ShutdownTimeout time.Duration `conf:"default:20s"`
+		SiteURL         string        `conf:"default:http://localhost"`
+		APIHost         string        `conf:"default:0.0.0.0:3000"`
+	}
+	Postgres struct {
+		User               string `conf:"default:postgres"`
+		Password           string `conf:"default:postgres,mask"`
+		Host               string `conf:"default:postgres"`
+		Name               string `conf:"default:postgres,env:POSTGRES_DB"`
+		Port               int    `conf:"default:5432"`
+		MaxIdleConns       int    `conf:"default:3"`
+		MaxOpenConns       int    `conf:"default:3"`
+		SSLMode            string `conf:"default:disable"`
+		StatementCacheMode string `conf:"default:prepare"`
+	}
+	Redis struct {
+		Addr     string `conf:"default:redis:6379"` // "/var/run/redis/redis.sock"
+		Network  string // "unix"
+		Password string `conf:"mask"`
+		DB       int    `conf:"default:0"`
+	}
+	Email struct {
+		Host                 string
+		Port                 int    `conf:"default:465"`
+		Encryption           string `conf:"default:SSL,help: Options [None|SSL|TLS|SSLTLS|STARTTLS]"`
+		Username             string
+		Password             string `conf:"mask"`
+		Sender               string
+		ActivationSubject    string `conf:"default:Gisquick Registration"`
+		PasswordResetSubject string `conf:"default:Gisquick Password Reset"`
+	}
+}
+
+type ServerHandle struct {
+	Server *server.Server
+	Config *AppConfig
+	Logger *zap.SugaredLogger
+	DB     *sqlx.DB
+	Redis  *redis.Client
+}
+
+func (h *ServerHandle) Close() {
+	// log.Infow("shutdown", "status", "stopping database support", "host", cfg.Postgres.Host)
+	h.DB.Close()
+	h.Redis.Close()
+}
+
+func CreateServer() (ServerHandle, error) {
+	handle := ServerHandle{}
+	cfg := AppConfig{}
+	handle.Config = &cfg
 
 	// const prefix = "GISQUICK"
 	const prefix = ""
@@ -128,22 +147,23 @@ func Serve() error {
 	if err != nil {
 		if errors.Is(err, conf.ErrHelpWanted) {
 			fmt.Println(help)
-			return nil
+			return handle, nil
 		}
-		return fmt.Errorf("parsing config: %w", err)
+		return handle, fmt.Errorf("parsing config: %w", err)
 	}
 	logLevel := zap.InfoLevel
 	if cfg.Gisquick.Debug {
 		logLevel = zap.DebugLevel
 	}
 	log, err := createLogger(logLevel)
+	handle.Logger = log
 	if err != nil {
-		return fmt.Errorf("failed to create logger: %w", err)
+		return handle, fmt.Errorf("failed to create logger: %w", err)
 	}
 
 	out, err := conf.String(&cfg)
 	if err != nil {
-		return fmt.Errorf("generating config for output: %w", err)
+		return handle, fmt.Errorf("generating config for output: %w", err)
 	}
 	// fmt.Println(out)
 	log.Infow("startup", "config", out)
@@ -160,13 +180,10 @@ func Serve() error {
 		SSLMode:            cfg.Postgres.SSLMode,
 		StatementCacheMode: cfg.Postgres.StatementCacheMode,
 	})
+	handle.DB = dbConn
 	if err != nil {
-		return fmt.Errorf("connecting to db: %w", err)
+		return handle, fmt.Errorf("connecting to db: %w", err)
 	}
-	defer func() {
-		// log.Infow("shutdown", "status", "stopping database support", "host", cfg.Postgres.Host)
-		dbConn.Close()
-	}()
 
 	// for unix socket, use Network: "unix" and Addr: "/var/run/redis/redis.sock"
 	rdb := redis.NewClient(&redis.Options{
@@ -175,7 +192,7 @@ func Serve() error {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
-	defer rdb.Close()
+	handle.Redis = rdb
 
 	var es email.EmailService
 	encryptionMap := map[string]mail.Encryption{
@@ -247,12 +264,26 @@ func Serve() error {
 
 	sws := ws.NewSettingsWS(log)
 	s := server.NewServer(log, conf, authServ, accountsService, projectsServ, sws, limiter, notifications)
+	handle.Server = s
 
 	extensionsList := strings.Split(cfg.Gisquick.Extensions, ",")
 	for _, e := range extensionsList {
 		if err := s.AddExtension(e); err != nil {
 			log.Errorw("adding server extension", "name", e, zap.Error(err))
 		}
+	}
+	return handle, nil
+}
+
+func Serve() error {
+	handle, err := CreateServer()
+	s := handle.Server
+	cfg := handle.Config
+	log := handle.Logger
+	defer handle.Close()
+
+	if err != nil {
+		return err
 	}
 
 	// Start server

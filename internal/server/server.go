@@ -136,6 +136,10 @@ func NewServer(log *zap.SugaredLogger, cfg Config,
 	return s
 }
 
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.echo.ServeHTTP(w, r)
+}
+
 func (s *Server) ListenAndServe(addr string) error {
 	return s.echo.Start(addr)
 }

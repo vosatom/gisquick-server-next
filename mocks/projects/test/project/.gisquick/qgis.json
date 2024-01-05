@@ -1,0 +1,36 @@
+{
+  "file": "project.qgz",
+  "title": "",
+  "layers": {},
+  "layers_order": [],
+  "layers_tree": [],
+  "base_layers": [],
+  "composer_templates": [],
+  "projection": "EPSG:3857",
+  "units": {
+    "map": "meters",
+    "area": "m2",
+    "distance": "meters",
+    "factor": 39.37007874,
+    "position_precision": 2
+  },
+  "scales": [],
+  "extent": [-20037508, -20037508, 20037508, 44927335],
+  "projections": {
+    "EPSG:3857": {
+      "is_geographic": false,
+      "proj4": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs"
+    },
+    "EPSG:4326": {
+      "is_geographic": true,
+      "proj4": "+proj=longlat +datum=WGS84 +no_defs"
+    }
+  },
+  "client_info": {
+    "qgis_version": "3.34.0-Prizren",
+    "plugin_version": "2.5.3",
+    "platform": ["x86_64"],
+    "directory": "/publish/project"
+  },
+  "project_hash": "123456"
+}
